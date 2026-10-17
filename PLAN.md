@@ -79,10 +79,11 @@ Demo accounts (spec §8.3; password `Nascon@26` for all):
 |---|---|
 | `GET /api/v1/leagues` | `[{"league_id","name","sport_id","tenant_id"}]` (only the caller's tenant; super_admin sees all) |
 | `GET /api/v1/fixtures?league_id=league-alpha-1` | `[{"match_id","league_id","sport_id","home_team_id","home_name","away_team_id","away_name","status","scheduled_at","venue","home_score","away_score"}]` |
-| `GET /api/v1/matches/{match_id}` | Same body as `GET /audit/v1/score/{match_id}`, **plus** `"pinned_product": {product} or null` |
+| `GET /api/v1/matches/{match_id}` | Same body as `GET /audit/v1/score/{match_id}`, **plus** `"pinned_product": {product} or null`, and `"name"` inside `home` / `away` (team display name) |
 | `GET /api/v1/matches/{match_id}/stream` | **SSE** (`text/event-stream`). Sends `event: update` with the match JSON on every new event, status change or product pin. The app falls back to polling every 3 s if SSE fails. |
 | `GET /api/v1/standings/{league_id}` | Same body as `GET /audit/v1/standings/{league_id}` |
 | `GET /api/v1/clubs/{club_id}` | `{"club_id","name","tenant_id","home_venue":{"name","lat","lng"},"socials":{"x","instagram"},"staff":[{"name","role"}],"roster":[{"player_id","name","position","role","squad_id"}],"stats":[{"season","played","won","drawn","lost"}]}` |
+| `GET /api/v1/sports/{sport_id}` | The stored sport config (same shape as the `POST /audit/v1/sports` body). The app builds its scoring buttons from `scoring_events`. |
 | `GET /api/v1/products` | `[{"product_id","name","category","description","variants":[{"variant_id","label","size","color","price_minor","currency","stock"}]}]` |
 | `POST /api/v1/matches/{match_id}/pin` with body `{"product_id"}` | 200 with the match JSON; pushes an SSE update (organizer/admin only) |
 | `GET /api/v1/ping` | `{"pong":true}` (the rate-limit probe in the spec) |
@@ -99,7 +100,7 @@ Demo accounts (spec §8.3; password `Nascon@26` for all):
 ### 3.4 Demo content seeded by `/reset`, so the app has something to show
 Use **`demo-` prefixed ids** so they never collide with grader ids such as `m1` or `lg-1`.
 - League `league-alpha-1` (football, tenant-alpha) is registered for standings. Its teams are `club-alpha-1`, `club-alpha-2`, `demo-club-3` and `demo-club-4`, and it has 6 fixtures `demo-m1`…`demo-m6`. Two are completed with events, one is in_progress and the rest are upcoming. `scheduled_at` and `venue` are filled in.
-- The roster league for `league-alpha-1` has a squad per club with about 5 players each (including `player-alpha-1` in club-alpha-1). The transfer window must include today.
+- The roster league for `league-alpha-1` has one squad per club (the app reads each club's `squad_id` from `GET /api/v1/clubs/{id}` roster entries), with about 5 players each (including `player-alpha-1` in club-alpha-1). The transfer window must include today.
 - The club profile data (venue, socials, staff, stats) for every club.
 - Product `prod-jersey-001` with variants M and L, plus 1–2 extra demo products.
 

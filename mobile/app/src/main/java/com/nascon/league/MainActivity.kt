@@ -1,39 +1,54 @@
 package com.nascon.league
 
+import android.app.Application
+import android.graphics.Color
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
+import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.ui.Alignment
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
-import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.nascon.league.data.Repository
+import com.nascon.league.data.ServiceLocator
+import com.nascon.league.ui.AppViewModel
+import com.nascon.league.ui.MainShell
+import com.nascon.league.ui.screens.LoginScreen
+import com.nascon.league.ui.theme.LeagueTheme
+import com.nascon.league.ui.theme.Pitch
+import com.nascon.league.ui.theme.parseHexColor
+
+class LeagueApp : Application() {
+    override fun onCreate() {
+        super.onCreate()
+        ServiceLocator.repo = Repository(this)
+    }
+}
 
 class MainActivity : ComponentActivity() {
     @OptIn(ExperimentalComposeUiApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Light icons on the coloured connection strip; dark icons on the chalk navigation bar.
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT),
+        )
         super.onCreate(savedInstanceState)
         setContent {
-            MaterialTheme {
+            val app: AppViewModel = viewModel()
+            val session by app.session.collectAsStateWithLifecycle()
+            val brand = parseHexColor(session?.tenant?.primary_color) ?: Pitch.Turf
+            LeagueTheme(brand = brand) {
                 Surface(Modifier.fillMaxSize().semantics { testTagsAsResourceId = true }) {
-                    Column(
-                        Modifier.fillMaxSize().padding(24.dp),
-                        verticalArrangement = Arrangement.Center,
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
-                        Text("NaSCon League", style = MaterialTheme.typography.headlineMedium,
-                            modifier = Modifier.testTag("app_title"))
-                        Text("Server: ${BuildConfig.API_BASE_URL}", style = MaterialTheme.typography.bodyMedium)
-                    }
+                    val current = session
+                    if (current == null) LoginScreen(app) else MainShell(app, current)
                 }
             }
         }
