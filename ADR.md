@@ -33,7 +33,7 @@
 - Context: Five roles need tenant and ownership boundaries with no managed BaaS.
 - Decision: Verify HS256 tokens and apply centralized ownership policies.
 - Alternatives: External identity services violate self-hosting or add deployment overhead.
-- Consequences: Demo credentials seed locally; deployment must replace default secrets.
+- Consequences: Demo credentials seed locally with individual PBKDF2 salts; the token key derives from the private team salt unless a separate JWT_SECRET is supplied.
 
 ## ADR-006: Atomic checkout and durable outbox
 - Status: Accepted

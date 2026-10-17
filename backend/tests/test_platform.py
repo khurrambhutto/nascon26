@@ -71,3 +71,17 @@ def test_offline_replay(client):
     assert response.status_code == 200, response.text
     assert response.json()["results"][0]["resolution"] == "rebased_append"
     assert client.post("/audit/v1/offline-sync", json=body).json()["summary"]["duplicate"] == 1
+
+
+def test_rate_limit_expires_and_does_not_affect_audit(client, monkeypatch):
+    from types import SimpleNamespace
+    from app import main
+    current = [100.0]
+    monkeypatch.setattr(main, "time", SimpleNamespace(monotonic=lambda: current[0]))
+    for _ in range(100):
+        assert client.get("/api/v1/ping").status_code == 200
+    response = client.get("/api/v1/ping")
+    assert response.status_code == 429 and response.headers["Retry-After"] == "10"
+    assert client.post("/audit/v1/rbac-matrix").status_code == 200
+    current[0] += 11
+    assert client.get("/api/v1/ping").status_code == 200

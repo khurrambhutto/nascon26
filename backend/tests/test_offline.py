@@ -29,6 +29,26 @@ def test_rule_rejected_offline(client):
     assert result["status"] == "rejected" and result["error_code"] == "MATCH_NOT_IN_PROGRESS"
 
 
+def test_malformed_action_payload_is_per_action_validation_error(client):
+    body = {"device_id": "dev", "actions": [action("malformed", "unused", payload={})]}
+    response = client.post("/audit/v1/offline-sync", json=body)
+    assert response.status_code == 200
+    assert response.json()["results"][0]["error_code"] == "VALIDATION_ERROR"
+
+
+def test_offline_roster_actions_use_shared_rules(client):
+    payload = {"request_id": "offline-transfer", "league_id": "league-alpha-1", "player_id": "demo-player-1-1", "type": "transfer", "from_squad_id": "demo-squad-1", "to_squad_id": "demo-squad-2", "effective_date": "2026-10-17", "reason": "Offline roster action", "requested_by": "u-manager"}
+    body = {"device_id": "roster-device", "actions": [{"action_id": "roster-action", "type": "roster_transfer", "queued_at": "2026-10-17T11:00:00Z", "base_version": 0, "payload": payload}]}
+    response = client.post("/audit/v1/offline-sync", json=body).json()
+    assert response["results"][0] == {"action_id": "roster-action", "status": "applied", "resolution": "appended", "error_code": None, "processed_order": 1, "server_version": 1, "signature": None}
+    assert client.post("/audit/v1/offline-sync", json=body).json()["summary"]["duplicate"] == 1
+    body["actions"][0]["action_id"] = "rejected-action"
+    body["actions"][0]["payload"]["request_id"] = "another-transfer"
+    response = client.post("/audit/v1/offline-sync", json=body).json()
+    assert response["results"][0]["error_code"] == "NOT_IN_SQUAD"
+    assert response["results"][0]["server_version"] == 1
+
+
 @pytest.mark.parametrize("updates", [{"actions": []}, {"device_id": "bad|id"}, {"actions": [action("a", "a", queued="bad")]}, {"actions": [action("a", "a", version=True)]}, {"actions": [action("a", "a", type="unknown")]}])
 def test_invalid_offline_envelope(client, updates):
     response = client.post("/audit/v1/offline-sync", json={"device_id": "dev", "actions": [action("a", "a")], **updates})

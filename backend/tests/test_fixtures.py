@@ -67,6 +67,7 @@ def test_single_elimination_seeding_byes_and_advancement(n):
     first = result["rounds"][0]["matches"]
     assert sum(m["bye"] for m in first) == result["bracket_size"] - n
     assert len(nodes) == result["bracket_size"] - 1 + int(n > 2)
+    assert len(result["rounds"]) == result["bracket_size"].bit_length() - 1
     for node in first:
         if node["bye"]:
             assert node["winner"] == node["home"]

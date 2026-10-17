@@ -4,7 +4,7 @@ from pathlib import Path
 
 root = Path(__file__).resolve().parents[1]
 report = json.loads((root / "backend" / "coverage.json").read_text())
-areas = {"fixtures": ["fixtures.py"], "scoring": ["scoring.py"], "standings": ["standings.py"], "store": ["store.py"], "roster": ["roster.py"], "rbac": ["auth.py"]}
+areas = {"fixtures": ["fixtures.py"], "scoring": ["scoring.py"], "standings": ["standings.py"], "store": ["store.py", "orders.py"], "roster": ["roster.py"], "rbac": ["auth.py"]}
 result = {}
 for area, filenames in areas.items():
     summaries = [entry["summary"] for path, entry in report["files"].items() if Path(path).name in filenames]

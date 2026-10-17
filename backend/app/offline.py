@@ -1,7 +1,7 @@
 """Ordered, idempotent offline replay with a savepoint per action."""
 from .common import DomainError, check, identifier, integer, obj, timestamp
-from .roster import transfer
-from .scoring import append_event, project
+from .roster import transfer, validate_transfer
+from .scoring import append_event, validate_event
 
 
 def sync(store, body):
@@ -42,6 +42,10 @@ def sync(store, body):
                 elif duplicate_event and duplicate_event["request"] == payload:
                     status, resolution = "duplicate", "skipped_duplicate"
                 else:
+                    if event_action:
+                        validate_event(payload)
+                    else:
+                        validate_transfer(payload)
                     if event_action:
                         store.require("match", payload.get("match_id", ""))
                     else:

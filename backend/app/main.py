@@ -16,12 +16,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from starlette.exceptions import HTTPException
 
-from . import auth, fixtures, offline, roster, scheduling, scoring, seed, standings, store as merchandise
+from . import auth, fixtures, offline, orders, roster, scheduling, scoring, seed, standings, store as merchandise
 from .common import DomainError, canonical, check, fail, identifier, obj
 from .storage import initialize, transaction
 from .schemas import (CheckoutRequest, EventRequest, FixturesRequest, LeagueRequest,
-                      LoginRequest, OfflineRequest, PinRequest, ResetRequest,
-                      RosterSetupRequest, SportRequest, TransferRequest)
+                      LeagueConfigurationRequest, LoginRequest, OfflineRequest,
+                      OrderStatusRequest, PinRequest, ResetRequest, RosterSetupRequest,
+                      SportRequest, TenantBrandingRequest, TransferRequest)
 
 log = logging.getLogger(__name__)
 
@@ -59,6 +60,13 @@ async def boundaries(request, call_next):
             return JSONResponse(DomainError(413, "PAYLOAD_TOO_LARGE").body, status_code=413)
         chunks.append(chunk)
     request._body = b"".join(chunks)
+    if request._body and request.method in ("POST", "PUT", "PATCH") and "/rbac/" not in request.url.path:
+        def reject_constant(value):
+            raise ValueError("Non-finite JSON number")
+        try:
+            json.loads(request._body.decode("utf-8"), parse_constant=reject_constant)
+        except (ValueError, UnicodeDecodeError):
+            return JSONResponse(DomainError(400, "VALIDATION_ERROR", fields=["body"]).body, status_code=400)
     if request.url.path.startswith("/api/v1/"):
         ip, allowed = request.client.host if request.client else "unknown", None
         if cache is not None:
@@ -421,3 +429,76 @@ def match_status(match_id: str, request: Request, body: dict = Body(...)):
         match = db.require("match", match_id)
         auth.authorize(db, user, "fixtures", match.get("league_id"))
         return scheduling.change_status(db, match_id, body)
+
+
+@app.get("/api/v1/orders", response_model=list[dict])
+def app_orders(request: Request):
+    with transaction() as db:
+        user = auth.authenticate(db, request.headers.get("authorization"))
+        return [orders.public_order(order) for order in db.all("order") if orders.visible_order(user, order)]
+
+
+@app.get("/api/v1/orders/{order_id}", response_model=dict)
+def app_order(order_id: str, request: Request):
+    with transaction() as db:
+        user = auth.authenticate(db, request.headers.get("authorization"))
+        order = db.require("order", order_id)
+        if not orders.visible_order(user, order):
+            fail(403, "FORBIDDEN")
+        return orders.public_order(order)
+
+
+@app.patch("/api/v1/orders/{order_id}/status", response_model=dict)
+def order_status(order_id: str, request: Request, body: OrderStatusRequest):
+    with transaction() as db:
+        user = auth.authenticate(db, request.headers.get("authorization"))
+        return orders.transition(db, order_id, body.data(), user)
+
+
+@app.patch("/api/v1/leagues/{league_id}/configuration", response_model=dict)
+def league_configuration(league_id: str, request: Request, body: LeagueConfigurationRequest):
+    from .common import integer, text
+    with transaction() as db:
+        user = auth.authenticate(db, request.headers.get("authorization"))
+        auth.authorize(db, user, "fixtures", league_id)
+        league = db.require("league", league_id)
+        config = body.data()
+        if "minimum_rest_minutes" in config:
+            integer(config["minimum_rest_minutes"], "minimum_rest_minutes", 0)
+        if "season" in config:
+            text(config["season"], "season", 80)
+        if "format" in config:
+            check(config["format"] in ("round_robin", "swiss", "single_elim", "double_elim", "hybrid"), "format")
+        seen = set()
+        for division in config.get("divisions", []):
+            did = identifier(division.get("division_id"), "division_id")
+            text(division.get("name"), "division.name", 80)
+            teams = division.get("teams")
+            check(isinstance(teams, list) and all(isinstance(t, str) and t in league["teams"] and t not in seen for t in teams), "division.teams")
+            check(len(teams) == len(set(teams)), "division.teams")
+            seen.update(teams)
+        for key, value in config.get("promotion_relegation", {}).items():
+            check(key in ("promote", "relegate"), "promotion_relegation")
+            integer(value, "promotion_relegation." + key, 0)
+        league.update(config)
+        db.put("league", league_id, league)
+        return {"league_id": league_id, "configuration": {k: league[k] for k in LeagueConfigurationRequest.model_fields if k in league}}
+
+
+@app.patch("/api/v1/tenants/{tenant_id}/branding", response_model=dict)
+def tenant_branding(tenant_id: str, request: Request, body: TenantBrandingRequest):
+    import re
+    from .common import text
+    with transaction() as db:
+        user = auth.authenticate(db, request.headers.get("authorization"))
+        auth.authorize(db, user, "config")
+        tenant = db.require("tenant", tenant_id)
+        fields = body.data()
+        if "name" in fields:
+            text(fields["name"], "name", 100)
+        if "primary_color" in fields:
+            check(isinstance(fields["primary_color"], str) and re.fullmatch(r"#[0-9A-Fa-f]{6}", fields["primary_color"]) is not None, "primary_color")
+        if fields.get("logo_url") is not None:
+            check(fields["logo_url"].startswith(("http://", "https://")), "logo_url")
+        tenant.update(fields)
+        return db.put("tenant", tenant_id, tenant)

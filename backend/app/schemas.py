@@ -103,3 +103,23 @@ class LoginRequest(Input):
 
 class PinRequest(Input):
     product_id: str | None
+
+
+class OrderStatusRequest(Input):
+    request_id: str
+    status: str
+
+
+class LeagueConfigurationRequest(Input):
+    minimum_rest_minutes: int = 0
+    season: str | None = None
+    format: str | None = None
+    divisions: list[dict[str, Any]] = Field(default_factory=list)
+    promotion_relegation: dict[str, Any] = Field(default_factory=dict)
+    group_stage: dict[str, Any] = Field(default_factory=dict)
+
+
+class TenantBrandingRequest(Input):
+    name: str | None = None
+    primary_color: str | None = None
+    logo_url: str | None = None

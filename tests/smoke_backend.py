@@ -13,15 +13,16 @@ from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 BASE = sys.argv[1] if len(sys.argv) > 1 else "http://localhost:8080"
+SECONDARY_BASE = sys.argv[2] if len(sys.argv) > 2 else BASE
 
 
-def request(method, path, body=None, token=None):
+def request(method, path, body=None, token=None, base=None):
     headers = {"Content-Type": "application/json"}
     if token:
         headers["Authorization"] = "Bearer " + token
     data = json.dumps(body).encode() if body is not None else None
     try:
-        response = urlopen(Request(BASE + path, data=data, headers=headers, method=method), timeout=10)
+        response = urlopen(Request((base or BASE) + path, data=data, headers=headers, method=method), timeout=10)
     except HTTPError as exc:
         response = exc
     return response.status, json.load(response)
@@ -41,7 +42,7 @@ def main():
 
     def checkout(i):
         barrier.wait()
-        return request("POST", "/audit/v1/checkout", {"order_id": f"smoke-order-{i}", "customer_id": f"smoke-customer-{i}", "items": [{"variant_id": "var-jersey-001-M", "quantity": 1}], "payment": {"token": "tok_success"}})
+        return request("POST", "/audit/v1/checkout", {"order_id": f"smoke-order-{i}", "customer_id": f"smoke-customer-{i}", "items": [{"variant_id": "var-jersey-001-M", "quantity": 1}], "payment": {"token": "tok_success"}}, base=SECONDARY_BASE if i % 2 else BASE)
 
     start = time.monotonic()
     with ThreadPoolExecutor(max_workers=20) as pool:

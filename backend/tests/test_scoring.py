@@ -104,3 +104,10 @@ def test_league_validation(client):
     assert client.post("/audit/v1/leagues", json={**body, "league_id": "another"}).json()["error"]["code"] == "MATCH_EXISTS"
     assert client.post("/audit/v1/leagues", json={**body, "league_id": "other", "sport_id": "unknown"}).status_code == 404
     assert client.post("/audit/v1/leagues", json={**body, "teams": ["a", "a"]}).status_code == 400
+
+
+def test_non_finite_json_payload_is_rejected_without_mutation(client):
+    raw = '{"event_id":"nan-event","match_id":"demo-m3","type":"score","payload":{"team_id":"club-alpha-1","event_type":"goal","unknown":NaN}}'
+    response = client.post("/audit/v1/events", content=raw, headers={"Content-Type": "application/json"})
+    assert response.status_code == 400
+    assert client.get("/audit/v1/score/demo-m3").json()["version"] == 2

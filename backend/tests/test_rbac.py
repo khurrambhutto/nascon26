@@ -63,3 +63,17 @@ def test_mobile_scope_and_pin_ownership(client, login):
     assert client.get("/api/v1/sports", headers=viewer).status_code == 200
     assert client.post("/api/v1/auth/login", json={"email": "manager@nascon.test", "password": "wrong"}).status_code == 401
     assert client.post("/api/v1/auth/login", json={"email": "missing@nascon.test", "password": "wrong"}).status_code == 401
+
+
+def test_password_hashes_are_salted_and_independent_of_token_keys(client, monkeypatch):
+    from app.auth import password_hash, verify_password
+    first = password_hash("Nascon@26", "manager@nascon.test")
+    second = password_hash("Nascon@26", "manager@nascon.test")
+    assert first != second
+    assert verify_password("Nascon@26", first)
+    assert not verify_password("wrong", first)
+    assert not verify_password("Nascon@26", "corrupt")
+    assert not verify_password("Nascon@26", "wrong$120000$00$00")
+    monkeypatch.setenv("JWT_SECRET", "a-new-random-test-token-secret-that-is-long")
+    response = client.post("/api/v1/auth/login", json={"email": "manager@nascon.test", "password": "Nascon@26"})
+    assert response.status_code == 200

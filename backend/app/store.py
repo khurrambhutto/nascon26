@@ -71,7 +71,8 @@ def checkout(store, body):
     document.save()
     receipt = {"payload": payload, "signature": sign(oid, payload), "pdf_base64": base64.b64encode(pdf.getvalue()).decode()}
     response = {"order_id": oid, "status": "paid", "currency": "PKR", "items": result_items, "subtotal_minor": subtotal, "discount_minor": discounted, "total_minor": total, "payment": {"authorization_id": "auth_" + uuid4().hex, "capture_id": "cap_" + uuid4().hex, "state": "captured"}, "receipt": receipt}
-    store.put("order", oid, {"request": request, "response": response})
+    related = [p for p in store.all("product") if ids.intersection(p["variant_ids"])]
+    store.put("order", oid, {"request": request, "response": response, "status": "paid", "tenant_id": related[0]["tenant_id"] if related else "tenant-alpha", "club_ids": sorted({p["club_id"] for p in related}), "history": [{"status": "paid", "who": customer, "when": payload["paid_at"]}]})
     # Transactional outbox: worker publishes to Redis Streams and archives the PDF.
     event_id = uuid4().hex
     store.put("outbox", event_id, {"event_id": event_id, "type": "order.status_changed", "order_id": oid, "status": "paid", "created_at": now(), "published": False, "archived": False})

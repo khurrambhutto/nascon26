@@ -171,6 +171,8 @@ def elimination(teams, params, double):
 
     def make(mid, bracket, r, index):
         node = {"match_id": mid, "bracket": bracket, "round": r, "index": index, "home": None, "away": None, "home_seed": None, "away_seed": None, "bye": False, "winner": None, "loser": None, "winner_to": None, "loser_to": None}
+        if double:
+            node.update(conditional=False, required=True)
         nodes[mid] = node
         known[mid] = set()
         return node
@@ -262,5 +264,5 @@ def elimination(teams, params, double):
     if double:
         return {"format": "double_elim", "bracket_size": size, "bracket_reset": reset, "winners": winners, "losers": losers, "grand_final": finals}
     if "TP" in nodes:
-        winners.append({"round": k, "matches": [nodes["TP"]]})
+        winners[-1]["matches"].append(nodes["TP"])
     return {"format": "single_elim", "bracket_size": size, "rounds": winners}

@@ -56,6 +56,9 @@ def run():
                 if not event["published"]:
                     queue.xadd("domain-events", {"event_id": event["event_id"], "payload": canonical({k: v for k, v in event.items() if k not in ("published", "archived")})})
                     event["published"] = True
+                    with transaction() as db:
+                        if db.get("outbox", event["event_id"]):
+                            db.put("outbox", event["event_id"], event)
                 if not event["archived"]:
                     with transaction() as db:
                         order = db.get("order", event["order_id"])

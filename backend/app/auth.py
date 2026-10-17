@@ -2,21 +2,35 @@
 import hashlib
 import hmac
 import os
+import secrets
 import time
 
 import jwt
 
-from .common import fail
+from .common import DAY1_SALT, fail
 
 ROLES = {"admin": "super_admin", "organizer": "league_organizer", "manager": "club_manager", "player": "player", "viewer": "viewer"}
 
 
 def secret():
-    return os.environ.get("JWT_SECRET", "nascon-local-development-secret-change-for-deployment")
+    return os.environ.get("JWT_SECRET") or hmac.new(DAY1_SALT, b"nascon-jwt-signing-key-v1", hashlib.sha256).hexdigest()
 
 
 def password_hash(password, email):
-    return hashlib.pbkdf2_hmac("sha256", password.encode(), (email + secret()).encode(), 120000).hex()
+    salt = secrets.token_bytes(16)
+    derived = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, 120000).hex()
+    return "pbkdf2_sha256$120000$" + salt.hex() + "$" + derived
+
+
+def verify_password(password, encoded):
+    try:
+        algorithm, rounds, salt, expected = encoded.split("$")
+        if algorithm != "pbkdf2_sha256" or int(rounds) != 120000:
+            return False
+        actual = hashlib.pbkdf2_hmac("sha256", password.encode(), bytes.fromhex(salt), int(rounds)).hex()
+        return hmac.compare_digest(expected, actual)
+    except (ValueError, TypeError):
+        return False
 
 
 def token(user):
@@ -50,7 +64,7 @@ def login(store, body):
     email = text(body.get("email"), "email", 254)
     password = text(body.get("password"), "password", 256)
     user = next((u for u in store.all("user") if u["email"] == email), None)
-    if not user or not hmac.compare_digest(user["password_hash"], password_hash(password, email)):
+    if not user or not verify_password(password, user["password_hash"]):
         fail(401, "INVALID_CREDENTIALS")
     return {"token": token(user), **identity(store, user)}
 
