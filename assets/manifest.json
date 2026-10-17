@@ -1,0 +1,47 @@
+{
+  "generator": "Built-in GPT Image",
+  "assets": [
+    {
+      "path": "clubs/lions-fc.png",
+      "width": 1254,
+      "height": 1254,
+      "format": "PNG RGBA",
+      "sha256": "453fcaf303e4e425ef098b2c3dc7bc7321d6a5c3ef9acd55a6fc12171732e02a"
+    },
+    {
+      "path": "clubs/eagles-fc.png",
+      "width": 1254,
+      "height": 1254,
+      "format": "PNG RGBA",
+      "sha256": "13715200f0b0508afd345f67609b6d3c9049e2185e7fefa98afe0216796512e3"
+    },
+    {
+      "path": "clubs/wolves-fc.png",
+      "width": 1254,
+      "height": 1254,
+      "format": "PNG RGBA",
+      "sha256": "6b78d5d294b2915bd33fadc702e931e5325459eaf2f9f7d9aeab2f0e4becd8fa"
+    },
+    {
+      "path": "clubs/bears-fc.png",
+      "width": 1254,
+      "height": 1254,
+      "format": "PNG RGBA",
+      "sha256": "0651d6664faa56341eb7f6a879efaff9b3714f5845d15dcd87e04c45b30cf82b"
+    },
+    {
+      "path": "illustrations/lions-victory.png",
+      "width": 1254,
+      "height": 1254,
+      "format": "PNG RGBA",
+      "sha256": "45a17a35725f1175a709be90cec6285d640e1d0b35750c83dd63f3490953954b"
+    },
+    {
+      "path": "products/lions-home-jersey.png",
+      "width": 1254,
+      "height": 1254,
+      "format": "PNG RGBA",
+      "sha256": "21d8aa8add3f2fdd7fda8529db1800fe8fb861d7e495c369906e413cccfbebab"
+    }
+  ]
+}
