@@ -3,6 +3,7 @@ package com.nascon.league.ui.screens
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -11,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -26,6 +28,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -36,6 +40,7 @@ import com.nascon.league.data.Session
 import com.nascon.league.ui.LoadViewModel
 import com.nascon.league.ui.UiState
 import com.nascon.league.ui.canManageRoster
+import com.nascon.league.ui.components.ChunkyCard
 import com.nascon.league.ui.components.ErrorState
 import com.nascon.league.ui.components.LoadingState
 import com.nascon.league.ui.components.PrimaryButton
@@ -45,8 +50,9 @@ import com.nascon.league.ui.components.ScreenHeader
 import com.nascon.league.ui.components.SectionLabel
 import com.nascon.league.ui.components.TeamBadge
 import com.nascon.league.ui.humanize
+import com.nascon.league.ui.theme.Condensed
 import com.nascon.league.ui.theme.Pitch
-import com.nascon.league.ui.theme.contentOn
+import com.nascon.league.ui.theme.edge
 
 class ClubViewModel(private val clubId: String) : LoadViewModel<Club>() {
     override suspend fun fetch(): Loaded<Club> = ServiceLocator.repo.club(clubId)
@@ -77,6 +83,9 @@ fun ClubScreen(clubId: String, session: Session, onBack: (() -> Unit)?, onManage
                 LazyColumn(Modifier.fillMaxSize().testTag("club_profile")) {
                     item { SavedDataNotice(s.savedAt) }
                     item { ClubHero(club, session.tenant?.name) }
+                    club.stats.firstOrNull()?.let { stat ->
+                        item { StatsRow(stat.played, stat.won, stat.lost) }
+                    }
                     if (session.canManageRoster(club.club_id)) {
                         item {
                             PrimaryButton(
@@ -130,7 +139,17 @@ fun ClubScreen(clubId: String, session: Session, onBack: (() -> Unit)?, onManage
                                 .testTag("player_${player.player_id}"),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            TeamBadge(player.name, player.player_id, size = 32.dp)
+                            Box(
+                                Modifier.size(40.dp).clip(RoundedCornerShape(10.dp)).background(Pitch.Peach),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(
+                                    initials(player.name),
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                            }
                             Spacer(Modifier.width(12.dp))
                             Column(Modifier.weight(1f)) {
                                 Text(player.name, style = MaterialTheme.typography.titleMedium)
@@ -154,21 +173,45 @@ fun ClubScreen(clubId: String, session: Session, onBack: (() -> Unit)?, onManage
     }
 }
 
+private fun initials(name: String): String =
+    name.split(" ").filter { it.isNotBlank() }.take(2).joinToString("") { it.first().uppercase() }
+
 @Composable
 private fun ClubHero(club: Club, tenantName: String?) {
-    val brand = MaterialTheme.colorScheme.primary
-    val onBrand = contentOn(brand)
-    Row(
-        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
-            .clip(RoundedCornerShape(20.dp)).background(brand).padding(20.dp),
-        verticalAlignment = Alignment.CenterVertically,
+    ChunkyCard(
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+        color = Pitch.Mint,
+        edgeColor = Pitch.Mint.edge(),
+        corner = 18.dp,
     ) {
-        TeamBadge(club.name, club.club_id, size = 64.dp)
-        Spacer(Modifier.width(16.dp))
-        Column {
-            Text(club.name, style = MaterialTheme.typography.headlineSmall, color = onBrand)
-            tenantName?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = onBrand.copy(alpha = 0.85f)) }
+        Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            TeamBadge(club.name, club.club_id, size = 84.dp)
+            Spacer(Modifier.height(12.dp))
+            Text(club.name, style = MaterialTheme.typography.headlineSmall, color = Pitch.Ink, textAlign = TextAlign.Center)
+            tenantName?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = Pitch.MintDeep, textAlign = TextAlign.Center) }
         }
+    }
+}
+
+@Composable
+private fun StatsRow(played: Int, won: Int, lost: Int) {
+    Column(Modifier.fillMaxWidth()) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
+            listOf("Played" to played, "Won" to won, "Lost" to lost).forEach { (label, value) ->
+                Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        "$value",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontFamily = Condensed,
+                        fontWeight = FontWeight.Bold,
+                        color = Pitch.Ink,
+                        textAlign = TextAlign.Center,
+                    )
+                    Text(label, style = MaterialTheme.typography.labelSmall, color = Pitch.Muted, textAlign = TextAlign.Center)
+                }
+            }
+        }
+        HorizontalDivider(color = Pitch.Line)
     }
 }
 

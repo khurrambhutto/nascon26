@@ -1,13 +1,13 @@
 package com.nascon.league.ui.screens
 
-import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.LaunchedEffect
 import com.nascon.league.data.Product
 import com.nascon.league.ui.components.Pill
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -36,9 +36,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
@@ -59,6 +60,7 @@ import com.nascon.league.ui.LoadViewModel
 import com.nascon.league.ui.UiState
 import com.nascon.league.ui.canScore
 import com.nascon.league.ui.components.Banner
+import com.nascon.league.ui.components.ChunkyCard
 import com.nascon.league.ui.components.DialogTags
 import com.nascon.league.ui.components.BannerKind
 import com.nascon.league.ui.components.BannerMessage
@@ -76,6 +78,7 @@ import com.nascon.league.ui.humanize
 import com.nascon.league.ui.money
 import com.nascon.league.ui.theme.Pitch
 import com.nascon.league.ui.theme.contentOn
+import com.nascon.league.ui.theme.edge
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
@@ -254,27 +257,33 @@ fun MatchScreen(matchId: String, session: Session, onBack: () -> Unit, onOpenPro
 private fun Scoreboard(match: MatchDetail, names: Map<String, String>) {
     val brand = MaterialTheme.colorScheme.primary
     val onBrand = contentOn(brand)
-    Column(
-        Modifier
+    ChunkyCard(
+        modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 8.dp)
-            .clip(RoundedCornerShape(20.dp))
-            .background(brand)
-            .padding(horizontal = 16.dp, vertical = 18.dp)
             .testTag("scoreboard"),
-        horizontalAlignment = Alignment.CenterHorizontally,
+        color = brand,
+        edgeColor = brand.edge(),
+        corner = 20.dp,
     ) {
-        MatchStatusPill(match.status)
-        Spacer(Modifier.height(16.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            SideColumn(match.home, names, onBrand, Modifier.weight(1f))
-            ScoreTile(match.home.score.toString(), size = 64.dp, modifier = Modifier.testTag("home_score"))
-            Text(":", color = onBrand.copy(alpha = 0.7f), style = MaterialTheme.typography.headlineMedium, modifier = Modifier.padding(horizontal = 6.dp))
-            ScoreTile(match.away.score.toString(), size = 64.dp, modifier = Modifier.testTag("away_score"))
-            SideColumn(match.away, names, onBrand, Modifier.weight(1f))
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 18.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            MatchStatusPill(match.status)
+            Spacer(Modifier.height(16.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                SideColumn(match.home, names, onBrand, Modifier.weight(1f))
+                ScoreTile(match.home.score.toString(), size = 64.dp, onDark = true, modifier = Modifier.testTag("home_score"))
+                Text(":", color = onBrand.copy(alpha = 0.7f), style = MaterialTheme.typography.headlineMedium, modifier = Modifier.padding(horizontal = 6.dp))
+                ScoreTile(match.away.score.toString(), size = 64.dp, onDark = true, modifier = Modifier.testTag("away_score"))
+                SideColumn(match.away, names, onBrand, Modifier.weight(1f))
+            }
+            Spacer(Modifier.height(14.dp))
+            Text(outcomeText(match, names), color = onBrand, style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
         }
-        Spacer(Modifier.height(14.dp))
-        Text(outcomeText(match, names), color = onBrand, style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
     }
 }
 
@@ -392,12 +401,21 @@ private fun ScoringPanel(
 
 @Composable
 private fun ScoreButton(text: String, enabled: Boolean, tag: String, onClick: () -> Unit) {
-    OutlinedButton(
-        onClick = onClick,
-        enabled = enabled,
-        shape = RoundedCornerShape(12.dp),
-        modifier = Modifier.heightIn(min = 48.dp).testTag(tag),
-    ) { Text(text) }
+    ChunkyCard(
+        modifier = Modifier
+            .alpha(if (enabled) 1f else 0.5f)
+            .testTag(tag)
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick),
+        color = Pitch.Card,
+        corner = 12.dp,
+    ) {
+        Box(
+            Modifier.heightIn(min = 48.dp).padding(horizontal = 16.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(text, style = MaterialTheme.typography.labelLarge, color = Pitch.Ink)
+        }
+    }
 }
 
 /** "+3 Three pointer", "Wicket", "+1 Wide" or "+1 Map win", read from the sport's rule values. */
@@ -503,20 +521,21 @@ private fun TimelineRow(
 
 @Composable
 private fun PinnedProduct(name: String, fromPrice: Long?, onOpen: () -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().padding(horizontal = 20.dp)
-            .clip(RoundedCornerShape(14.dp))
-            .border(1.dp, Pitch.Line, RoundedCornerShape(14.dp))
-            .background(Color.White)
-            .padding(14.dp)
-            .testTag("pinned_product"),
-        verticalAlignment = Alignment.CenterVertically,
+    ChunkyCard(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).testTag("pinned_product"),
+        color = Pitch.Peach,
+        corner = 14.dp,
     ) {
-        Column(Modifier.weight(1f)) {
-            Text(name, style = MaterialTheme.typography.titleMedium)
-            if (fromPrice != null) Text("From ${money(fromPrice)}", color = Pitch.Muted, style = MaterialTheme.typography.bodyMedium)
+        Row(
+            Modifier.fillMaxWidth().padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(name, style = MaterialTheme.typography.titleMedium)
+                if (fromPrice != null) Text("From ${money(fromPrice)}", color = Pitch.Muted, style = MaterialTheme.typography.bodyMedium)
+            }
+            TextButton(onClick = onOpen, modifier = Modifier.heightIn(min = 48.dp)) { Text("View item") }
         }
-        TextButton(onClick = onOpen, modifier = Modifier.heightIn(min = 48.dp)) { Text("View item") }
     }
 }
 

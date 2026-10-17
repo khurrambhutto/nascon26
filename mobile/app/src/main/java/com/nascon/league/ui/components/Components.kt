@@ -1,6 +1,24 @@
 package com.nascon.league.ui.components
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.material3.ripple
+import androidx.compose.runtime.remember
+import androidx.compose.ui.semantics.Role
+import com.nascon.league.ui.theme.edge
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -70,11 +88,12 @@ enum class Connection { Online, Offline, ServerDown, Syncing }
 @Composable
 fun ConnectionStrip(connection: Connection, pendingCount: Int, onClick: () -> Unit) {
     val (text, color) = when (connection) {
-        Connection.Online -> "Online" to Pitch.Win
-        Connection.Syncing -> "Syncing" to Color(0xFF1F5FA8)
+        Connection.Online -> "Online" to Pitch.Chalk
+        Connection.Syncing -> "Syncing" to Color(0xFF2F6E8E)
         Connection.ServerDown -> "Server not reachable" to Color(0xFF8A5A00)
         Connection.Offline -> "Offline, showing saved data" to Pitch.Whistle
     }
+    val textColor = if (connection == Connection.Online) Pitch.MintDeep else Color.White
     val background by animateColorAsState(color, label = "strip")
     val pendingText = when (pendingCount) {
         0 -> null
@@ -93,15 +112,15 @@ fun ConnectionStrip(connection: Connection, pendingCount: Int, onClick: () -> Un
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (connection == Connection.Syncing) {
-            CircularProgressIndicator(Modifier.size(12.dp), color = Color.White, strokeWidth = 2.dp)
+            CircularProgressIndicator(Modifier.size(12.dp), color = textColor, strokeWidth = 2.dp)
         } else {
-            Box(Modifier.size(8.dp).clip(CircleShape).background(Color.White))
+            Box(Modifier.size(8.dp).clip(CircleShape).background(if (connection == Connection.Online) Pitch.Win else Color.White))
         }
         Spacer(Modifier.width(8.dp))
-        Text(text, color = Color.White, style = MaterialTheme.typography.labelMedium, modifier = Modifier.testTag("connection_text"))
+        Text(text, color = textColor, style = MaterialTheme.typography.labelMedium, modifier = Modifier.testTag("connection_text"))
         Spacer(Modifier.weight(1f))
         if (pendingText != null) {
-            Text(pendingText, color = Color.White, style = MaterialTheme.typography.labelMedium, modifier = Modifier.testTag("pending_count"))
+            Text(pendingText, color = textColor, style = MaterialTheme.typography.labelMedium, modifier = Modifier.testTag("pending_count"))
         }
     }
 }
@@ -262,25 +281,33 @@ data class BannerMessage(val text: String, val kind: BannerKind)
 
 // ---------- Scoreboard pieces ----------
 
-/** The scoreboard tile: condensed white numerals in a dark inset block. */
+/** Score numerals; the number rolls up when it changes (the app's one playful motion). */
 @Composable
-fun ScoreTile(value: String, size: Dp = 40.dp, modifier: Modifier = Modifier) {
-    val fontSize = (size.value * 0.62f).sp
+fun ScoreTile(value: String, size: Dp = 40.dp, modifier: Modifier = Modifier, onDark: Boolean = false) {
+    val fontSize = (size.value * 0.66f).sp
     Box(
         modifier
             .widthIn(min = size * 0.85f)
             .heightIn(min = size)
-            .clip(RoundedCornerShape(size * 0.16f))
-            .background(Color(0xFF0F1A22))
+            .clip(RoundedCornerShape(size * 0.2f))
+            .background(if (onDark) Color.Black.copy(alpha = 0.18f) else Pitch.Ink)
             .padding(horizontal = size * 0.16f),
         contentAlignment = Alignment.Center,
     ) {
-        Text(
-            value,
-            color = Color.White,
-            style = TextStyle(fontFamily = Condensed, fontWeight = FontWeight.Bold, fontSize = fontSize, fontFeatureSettings = TABULAR),
-            maxLines = 1,
-        )
+        AnimatedContent(
+            targetState = value,
+            transitionSpec = {
+                (slideInVertically { it } + fadeIn()) togetherWith (slideOutVertically { -it } + fadeOut())
+            },
+            label = "score",
+        ) { shown ->
+            Text(
+                shown,
+                color = Color.White,
+                style = TextStyle(fontFamily = Condensed, fontWeight = FontWeight.Bold, fontSize = fontSize, fontFeatureSettings = TABULAR),
+                maxLines = 1,
+            )
+        }
     }
 }
 
@@ -298,7 +325,7 @@ fun TeamBadge(name: String, id: String, size: Dp = 36.dp) {
     }
 }
 
-/** Match status as icon-free text pill; "Live" gets the floodlight dot. Meaning never by colour alone. */
+/** Match status label; "Live" gets a pulsing coral dot. Meaning is in the text, never colour alone. */
 @Composable
 fun MatchStatusPill(status: String) {
     val label = when (status) {
@@ -311,19 +338,21 @@ fun MatchStatusPill(status: String) {
         else -> status.replace('_', ' ').replaceFirstChar { it.uppercase() }
     }
     val live = status == "in_progress"
+    val pulse = rememberInfiniteTransition(label = "live")
+    val dotAlpha by pulse.animateFloat(1f, 0.25f, infiniteRepeatable(tween(700), RepeatMode.Reverse), label = "dot")
     Row(
         Modifier
-            .clip(RoundedCornerShape(50))
-            .background(if (live) Pitch.Ink else Pitch.Wash)
-            .padding(horizontal = 10.dp, vertical = 3.dp)
+            .clip(RoundedCornerShape(6.dp))
+            .background(if (live) Color.White else Pitch.Wash)
+            .padding(horizontal = 9.dp, vertical = 4.dp)
             .semantics { contentDescription = "Status: $label" },
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (live) {
-            Box(Modifier.size(7.dp).clip(CircleShape).background(Pitch.Floodlight))
+            Box(Modifier.size(7.dp).clip(CircleShape).background(Pitch.Floodlight.copy(alpha = dotAlpha)))
             Spacer(Modifier.width(6.dp))
         }
-        Text(label, style = MaterialTheme.typography.labelMedium, color = if (live) Color.White else Pitch.Ink)
+        Text(label, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = if (live) Pitch.Whistle else Pitch.Ink)
     }
 }
 
@@ -336,31 +365,47 @@ fun SectionLabel(text: String, modifier: Modifier = Modifier) {
     )
 }
 
+/** Chunky primary button from the mockup: darker bottom edge that squishes down when pressed. */
 @Composable
 fun PrimaryButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true, busy: Boolean = false) {
-    Button(
-        onClick = onClick,
-        enabled = enabled && !busy,
-        shape = RoundedCornerShape(12.dp),
-        modifier = modifier.heightIn(min = 52.dp),
+    val primary = MaterialTheme.colorScheme.primary
+    val active = enabled && !busy
+    val source = remember { MutableInteractionSource() }
+    val pressed by source.collectIsPressedAsState()
+    val depth by animateDpAsState(if (pressed) 1.dp else 4.dp, label = "depth")
+    val face = if (active) primary else Pitch.Line
+    Box(
+        modifier
+            .heightIn(min = 56.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .background(if (active) primary.edge() else Pitch.Edge)
+            .padding(bottom = depth)
+            .clip(RoundedCornerShape(14.dp))
+            .background(face)
+            .clickable(interactionSource = source, indication = ripple(), enabled = active, role = Role.Button, onClick = onClick)
+            .padding(horizontal = 20.dp, vertical = 14.dp),
+        contentAlignment = Alignment.Center,
     ) {
-        if (busy) {
-            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = contentOn(MaterialTheme.colorScheme.primary))
-            Spacer(Modifier.width(10.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (busy) {
+                CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = contentOn(primary))
+                Spacer(Modifier.width(10.dp))
+            }
+            Text(text, style = MaterialTheme.typography.labelLarge, color = if (active) contentOn(primary) else Pitch.Muted)
         }
-        Text(text, style = MaterialTheme.typography.labelLarge)
     }
 }
 
-/** A selectable pill (chips) with a 48dp touch target. */
+/** Chunky selectable pill (mockup "sport" chips): white with a sand edge, ink when selected. 48dp target. */
 @Composable
 fun Pill(text: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
-    val primary = MaterialTheme.colorScheme.primary
+    val face by animateColorAsState(if (selected) Pitch.Ink else Pitch.Card, label = "pill")
+    val edgeColor by animateColorAsState(if (selected) Color(0xFF16231F) else Pitch.Edge, label = "pillEdge")
     Box(
         modifier
             .heightIn(min = 48.dp)
-            .clickable(enabled = enabled, onClick = onClick)
-            .padding(vertical = 6.dp),
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+            .padding(vertical = 4.dp),
         contentAlignment = Alignment.Center,
     ) {
         Text(
@@ -368,14 +413,37 @@ fun Pill(text: String, selected: Boolean, onClick: () -> Unit, modifier: Modifie
             style = MaterialTheme.typography.labelLarge,
             color = when {
                 !enabled -> Pitch.Muted.copy(alpha = 0.6f)
-                selected -> contentOn(primary)
+                selected -> Color.White
                 else -> Pitch.Ink
             },
             modifier = Modifier
-                .clip(RoundedCornerShape(50))
-                .background(if (selected) primary else Color.White)
-                .border(1.dp, if (selected) primary else Pitch.Line, RoundedCornerShape(50))
-                .padding(horizontal = 16.dp, vertical = 9.dp),
+                .clip(RoundedCornerShape(12.dp))
+                .background(edgeColor)
+                .padding(bottom = 3.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(face)
+                .border(1.5.dp, if (selected) Pitch.Ink else Pitch.Line, RoundedCornerShape(12.dp))
+                .padding(horizontal = 16.dp, vertical = 10.dp),
         )
     }
 }
+
+/** Raised card with the mockup's chunky darker bottom edge. */
+@Composable
+fun ChunkyCard(
+    modifier: Modifier = Modifier,
+    color: Color = Pitch.Card,
+    edgeColor: Color = Pitch.Edge,
+    corner: Dp = 16.dp,
+    content: @Composable () -> Unit,
+) {
+    Box(
+        modifier
+            .clip(RoundedCornerShape(corner))
+            .background(edgeColor)
+            .padding(bottom = 5.dp)
+            .clip(RoundedCornerShape(corner))
+            .background(color),
+    ) { content() }
+}
+

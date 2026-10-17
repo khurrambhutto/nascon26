@@ -43,6 +43,7 @@ import com.nascon.league.data.StandingRow
 import com.nascon.league.data.Standings
 import com.nascon.league.ui.DEFAULT_LEAGUE
 import com.nascon.league.ui.UiState
+import com.nascon.league.ui.components.ChunkyCard
 import com.nascon.league.ui.components.ErrorState
 import com.nascon.league.ui.components.LoadingState
 import com.nascon.league.ui.components.MessageState
@@ -54,6 +55,7 @@ import com.nascon.league.ui.humanize
 import com.nascon.league.ui.theme.Condensed
 import com.nascon.league.ui.theme.Pitch
 import com.nascon.league.ui.theme.TABULAR
+import com.nascon.league.ui.theme.edge
 import kotlin.math.floor
 
 /** Table + team names (names come from the league's fixtures, which are cached too). */
@@ -98,11 +100,14 @@ fun StandingsScreen(session: Session, onOpenClub: (String) -> Unit) {
                 if (table.table.isEmpty()) {
                     MessageState(Icons.AutoMirrored.Filled.List, "No table yet", "The table fills in once the first match is played.")
                 } else {
+                    val clubId = session.user.club_id
+                    val myRow = clubId?.let { id -> table.table.firstOrNull { it.team_id == id } }
                     LazyColumn(Modifier.fillMaxSize().testTag("standings_table")) {
                         item { SavedDataNotice(s.savedAt) }
+                        myRow?.let { row -> item { RankBadge(row) } }
                         item { HeaderRow() }
                         itemsIndexed(table.table, key = { _, row -> row.team_id }) { index, row ->
-                            StandingLine(row, s.data.names[row.team_id] ?: humanize(row.team_id)) { onOpenClub(row.team_id) }
+                            StandingLine(row, s.data.names[row.team_id] ?: humanize(row.team_id), clubId) { onOpenClub(row.team_id) }
                             val isCutLine = index + 1 == table.qualification_spots && index < table.table.lastIndex
                             if (isCutLine) QualificationLine(table.qualification_spots)
                             else HorizontalDivider(color = Pitch.Line)
@@ -130,20 +135,52 @@ private fun HeaderRow() {
 }
 
 @Composable
-private fun Cell(text: String, width: Int, bold: Boolean = false, muted: Boolean = false) {
+private fun Cell(text: String, width: Int, bold: Boolean = false, muted: Boolean = false, accent: Boolean = false) {
     Text(
         text,
         modifier = Modifier.width(width.dp),
         textAlign = TextAlign.Center,
         style = (if (bold) MaterialTheme.typography.titleMedium else MaterialTheme.typography.bodyMedium).merge(numStyle),
         fontWeight = if (bold) FontWeight.Bold else null,
-        color = if (muted) Pitch.Muted else Pitch.Ink,
+        color = if (accent) MaterialTheme.colorScheme.primary else if (muted) Pitch.Muted else Pitch.Ink,
         maxLines = 1,
     )
 }
 
+private fun ordinal(n: Int): String = when {
+    n % 100 in 11..13 -> "${n}th"
+    n % 10 == 1 -> "${n}st"
+    n % 10 == 2 -> "${n}nd"
+    n % 10 == 3 -> "${n}rd"
+    else -> "${n}th"
+}
+
 @Composable
-private fun StandingLine(row: StandingRow, name: String, onClick: () -> Unit) {
+private fun RankBadge(row: StandingRow) {
+    ChunkyCard(
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+        color = Pitch.Mint,
+        edgeColor = Pitch.Mint.edge(),
+    ) {
+        Column(Modifier.fillMaxWidth().padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                "Your club is ${ordinal(row.rank)}",
+                style = MaterialTheme.typography.headlineSmall,
+                color = Pitch.Ink,
+                textAlign = TextAlign.Center,
+            )
+            Text(
+                "${row.points} points from ${row.played} games",
+                style = MaterialTheme.typography.bodyMedium,
+                color = Pitch.MintDeep,
+                textAlign = TextAlign.Center,
+            )
+        }
+    }
+}
+
+@Composable
+private fun StandingLine(row: StandingRow, name: String, clubId: String?, onClick: () -> Unit) {
     val (statusText, statusIcon) = when (row.status) {
         "clinched" -> "Qualified" to Icons.Filled.CheckCircle
         "eliminated" -> "Out of contention" to Icons.Filled.Close
@@ -153,6 +190,7 @@ private fun StandingLine(row: StandingRow, name: String, onClick: () -> Unit) {
         Modifier
             .fillMaxWidth()
             .heightIn(min = 60.dp)
+            .then(if (row.team_id == clubId) Modifier.background(Pitch.MintSoft) else Modifier)
             .clickable(onClickLabel = "Open club", onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 8.dp)
             .semantics { contentDescription = "$name, position ${row.rank}, ${row.points} points, $statusText" }
@@ -191,7 +229,7 @@ private fun StandingLine(row: StandingRow, name: String, onClick: () -> Unit) {
         Cell("${row.drawn}", 26)
         Cell("${row.lost}", 26)
         Cell(formatDiff(row.diff), 46)
-        Cell("${row.points}", 36, bold = true)
+        Cell("${row.points}", 36, bold = true, accent = true)
     }
 }
 

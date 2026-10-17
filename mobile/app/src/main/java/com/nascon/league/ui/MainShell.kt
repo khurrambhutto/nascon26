@@ -1,5 +1,28 @@
 package com.nascon.league.ui
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.semantics.Role
+import com.nascon.league.ui.theme.contentOn
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.imePadding
@@ -12,9 +35,6 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -81,29 +101,8 @@ fun MainShell(app: AppViewModel, session: Session) {
 
     Scaffold(
         topBar = { ConnectionStrip(connection, pending.size) { nav.navigate("sync") } },
-        bottomBar = {
-            NavigationBar(containerColor = Color.White, tonalElevation = 0.dp) {
-                tabs.forEach { tab ->
-                    val selected = currentRoute?.substringBefore('/') == tab.route ||
-                        (tab.route == "fixtures" && currentRoute?.startsWith("match") == true) ||
-                        (tab.route == "store" && (currentRoute == "product/{id}" || currentRoute == "cart" || currentRoute == "receipt"))
-                    NavigationBarItem(
-                        selected = selected,
-                        onClick = { nav.goToTab(tab.route) },
-                        icon = { Icon(tab.icon, contentDescription = null) },
-                        label = { Text(tab.label, style = MaterialTheme.typography.labelMedium) },
-                        colors = NavigationBarItemDefaults.colors(
-                            indicatorColor = MaterialTheme.colorScheme.primaryContainer,
-                            selectedIconColor = MaterialTheme.colorScheme.primary,
-                            selectedTextColor = Pitch.Ink,
-                            unselectedIconColor = Pitch.Muted,
-                            unselectedTextColor = Pitch.Muted,
-                        ),
-                        modifier = Modifier.testTag("tab_${tab.route}"),
-                    )
-                }
-            }
-        },
+        containerColor = Pitch.Chalk,
+        bottomBar = { FloatingTabBar(currentRoute) { nav.goToTab(it) } },
     ) { inner ->
         // Role-aware home: club managers land on their club, everyone else on matches.
         val home = if (session.user.role == "club_manager") "club" else "fixtures"
@@ -112,6 +111,11 @@ fun MainShell(app: AppViewModel, session: Session) {
             navController = nav,
             startDestination = home,
             modifier = Modifier.fillMaxSize().padding(inner).consumeWindowInsets(inner).imePadding(),
+            // Gentle slide + fade between screens; back goes the other way.
+            enterTransition = { fadeIn(tween(220)) + slideInHorizontally(tween(260)) { it / 10 } },
+            exitTransition = { fadeOut(tween(160)) },
+            popEnterTransition = { fadeIn(tween(220)) + slideInHorizontally(tween(260)) { -it / 10 } },
+            popExitTransition = { fadeOut(tween(160)) + slideOutHorizontally(tween(220)) { it / 10 } },
         ) {
             val back: () -> Unit = { nav.popBackStack() }
             composable("fixtures") { FixturesScreen(session) { id -> nav.navigate("match/$id") } }
@@ -164,5 +168,47 @@ private fun NavHostController.goToTab(route: String) {
         popUpTo(graph.findStartDestination().id) { saveState = true }
         launchSingleTop = true
         restoreState = true
+    }
+}
+
+
+/** Floating rounded tab bar from the mockup; the selected tab fills with the tenant colour. */
+@Composable
+private fun FloatingTabBar(currentRoute: String?, onSelect: (String) -> Unit) {
+    Row(
+        Modifier
+            .navigationBarsPadding()
+            .padding(horizontal = 14.dp, vertical = 10.dp)
+            .fillMaxWidth()
+            .shadow(14.dp, RoundedCornerShape(26.dp), spotColor = Pitch.Ink.copy(alpha = 0.25f))
+            .clip(RoundedCornerShape(26.dp))
+            .background(Pitch.Card)
+            .padding(6.dp),
+    ) {
+        tabs.forEach { tab ->
+            val selected = currentRoute?.substringBefore('/') == tab.route ||
+                (tab.route == "fixtures" && currentRoute?.startsWith("match") == true) ||
+                (tab.route == "store" && (currentRoute == "product/{id}" || currentRoute == "cart" || currentRoute == "receipt")) ||
+                (tab.route == "club" && currentRoute?.startsWith("roster") == true)
+            val primary = MaterialTheme.colorScheme.primary
+            val background by animateColorAsState(if (selected) primary else Color.Transparent, tween(250), label = "tabBg")
+            val content by animateColorAsState(if (selected) contentOn(primary) else Pitch.Muted, tween(250), label = "tabFg")
+            Column(
+                Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(background)
+                    .selectable(selected = selected, role = Role.Tab, onClick = { onSelect(tab.route) })
+                    .heightIn(min = 56.dp)
+                    .padding(vertical = 8.dp)
+                    .testTag("tab_${tab.route}"),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+            ) {
+                Icon(tab.icon, contentDescription = null, tint = content, modifier = Modifier.size(22.dp))
+                Spacer(Modifier.height(3.dp))
+                Text(tab.label, style = MaterialTheme.typography.labelMedium, color = content, maxLines = 1)
+            }
+        }
     }
 }

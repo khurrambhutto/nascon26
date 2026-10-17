@@ -4,15 +4,22 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.util.Base64
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -20,10 +27,13 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -70,6 +80,7 @@ import com.nascon.league.data.friendlyError
 import com.nascon.league.ui.LoadViewModel
 import com.nascon.league.ui.UiState
 import com.nascon.league.ui.components.Banner
+import com.nascon.league.ui.components.ChunkyCard
 import com.nascon.league.ui.components.DialogTags
 import com.nascon.league.ui.components.BannerKind
 import com.nascon.league.ui.components.ErrorState
@@ -85,7 +96,6 @@ import com.nascon.league.ui.humanize
 import com.nascon.league.ui.money
 import com.nascon.league.ui.theme.Condensed
 import com.nascon.league.ui.theme.Pitch
-import com.nascon.league.ui.theme.contentOn
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.contentOrNull
@@ -165,11 +175,16 @@ fun StoreScreen(vm: StoreViewModel, onOpenProduct: (String) -> Unit, onOpenCart:
                 if (s.data.isEmpty()) {
                     MessageState(Icons.Filled.ShoppingCart, "Nothing for sale yet", "Club gear shows up here once the club adds products.")
                 } else {
-                    LazyColumn(Modifier.fillMaxSize().testTag("product_list")) {
-                        item { SavedDataNotice(s.savedAt) }
-                        items(s.data, key = { it.product_id }) { product ->
-                            ProductRow(product) { onOpenProduct(product.product_id) }
-                            HorizontalDivider(Modifier.padding(start = 20.dp), color = Pitch.Line)
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(2),
+                        modifier = Modifier.fillMaxSize().testTag("product_list"),
+                        contentPadding = PaddingValues(20.dp),
+                        horizontalArrangement = Arrangement.spacedBy(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp),
+                    ) {
+                        item(span = { GridItemSpan(maxLineSpan) }) { SavedDataNotice(s.savedAt) }
+                        itemsIndexed(s.data, key = { _, p -> p.product_id }) { index, product ->
+                            ProductCard(product, index) { onOpenProduct(product.product_id) }
                         }
                     }
                 }
@@ -183,49 +198,71 @@ private fun CartButton(count: Int, onClick: () -> Unit) {
     TextButton(onClick = onClick, modifier = Modifier.heightIn(min = 48.dp).testTag("open_cart")) {
         Icon(Icons.Filled.ShoppingCart, contentDescription = null)
         Spacer(Modifier.width(6.dp))
-        Text(if (count == 0) "Cart" else "Cart ($count)")
-    }
-}
-
-/** Generated product art: the item's initial on the tenant colour, so the list isn't a wall of text. */
-@Composable
-private fun ProductArt(product: Product, size: Int) {
-    val brand = MaterialTheme.colorScheme.primary
-    Box(
-        Modifier.size(size.dp).clip(RoundedCornerShape((size / 5).dp)).background(brand),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            product.name.take(1).uppercase(),
-            color = contentOn(brand),
-            fontFamily = Condensed,
-            fontWeight = FontWeight.Bold,
-            style = MaterialTheme.typography.headlineMedium,
-        )
-    }
-}
-
-@Composable
-private fun ProductRow(product: Product, onClick: () -> Unit) {
-    val inStock = product.variants.sumOf { it.stock }
-    Row(
-        Modifier.fillMaxWidth().clickable(onClickLabel = "Open product", onClick = onClick)
-            .padding(horizontal = 20.dp, vertical = 14.dp).testTag("product_${product.product_id}"),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        ProductArt(product, 64)
-        Spacer(Modifier.width(14.dp))
-        Column(Modifier.weight(1f)) {
-            Text(product.name, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            if (product.category.isNotBlank()) {
-                Text(humanize(product.category), style = MaterialTheme.typography.bodyMedium, color = Pitch.Muted)
-            }
-            Spacer(Modifier.height(4.dp))
-            product.variants.minOfOrNull { it.price_minor }?.let {
-                Text(money(it), style = MaterialTheme.typography.titleSmall)
+        Text("Cart")
+        if (count > 0) {
+            Spacer(Modifier.width(6.dp))
+            AnimatedContent(targetState = count, label = "cart_count") { c ->
+                Box(
+                    Modifier.defaultMinSize(minWidth = 22.dp, minHeight = 22.dp).clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary).padding(horizontal = 6.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text("$c", color = Color.White, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                }
             }
         }
-        if (inStock == 0) Text("Sold out", style = MaterialTheme.typography.labelMedium, color = Pitch.Whistle)
+    }
+}
+
+@Composable
+private fun ProductCard(product: Product, index: Int, onClick: () -> Unit) {
+    val inStock = product.variants.sumOf { it.stock }
+    val tile = if (index % 2 == 0) Pitch.Peach else Pitch.Mint
+    ChunkyCard(
+        modifier = Modifier.fillMaxWidth()
+            .clickable(onClickLabel = "Open product", onClick = onClick)
+            .testTag("product_${product.product_id}"),
+    ) {
+        Column(Modifier.padding(10.dp)) {
+            Box(
+                Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(14.dp)).background(tile),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    product.name.take(1).uppercase(),
+                    color = Pitch.Ink,
+                    fontFamily = Condensed,
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.displayMedium,
+                )
+            }
+            Spacer(Modifier.height(10.dp))
+            Text(product.name, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            if (product.category.isNotBlank()) {
+                Text(
+                    humanize(product.category),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Pitch.Muted,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Spacer(Modifier.height(6.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    product.variants.minOfOrNull { it.price_minor }?.let {
+                        Text(money(it), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                    }
+                    if (inStock == 0) Text("Sold out", style = MaterialTheme.typography.labelMedium, color = Pitch.Whistle)
+                }
+                Box(
+                    Modifier.size(36.dp).clip(RoundedCornerShape(10.dp)).background(Pitch.Ink),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(Icons.Filled.Add, contentDescription = null, tint = Pitch.Chalk, modifier = Modifier.size(20.dp))
+                }
+            }
+        }
     }
 }
 
@@ -247,7 +284,18 @@ fun ProductScreen(vm: StoreViewModel, productId: String, onBack: () -> Unit, onO
             return
         }
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
-            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { ProductArt(product, 140) }
+            Box(
+                Modifier.fillMaxWidth().aspectRatio(1.4f).clip(RoundedCornerShape(20.dp)).background(Pitch.Peach),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    product.name.take(1).uppercase(),
+                    color = Pitch.Ink,
+                    fontFamily = Condensed,
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.displayLarge,
+                )
+            }
             Spacer(Modifier.height(16.dp))
             Text(selected?.let { money(it.price_minor, it.currency) } ?: "", style = MaterialTheme.typography.headlineSmall)
             product.description?.let {
@@ -358,17 +406,22 @@ fun CartScreen(vm: StoreViewModel, onBack: () -> Unit, onPaid: () -> Unit) {
                 modifier = Modifier.padding(horizontal = 20.dp),
             )
             TestCard.entries.forEach { option ->
-                Row(
-                    Modifier.fillMaxWidth()
-                        .selectable(selected = card == option, onClick = { card = option }, role = Role.RadioButton)
-                        .heightIn(min = 56.dp).padding(horizontal = 8.dp)
-                        .testTag("card_${option.name.lowercase()}"),
-                    verticalAlignment = Alignment.CenterVertically,
+                ChunkyCard(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
+                    color = if (card == option) Pitch.MintSoft else Pitch.Card,
                 ) {
-                    RadioButton(selected = card == option, onClick = null, modifier = Modifier.padding(horizontal = 12.dp))
-                    Column {
-                        Text(option.title, style = MaterialTheme.typography.titleSmall)
-                        Text(option.hint, style = MaterialTheme.typography.bodyMedium, color = Pitch.Muted)
+                    Row(
+                        Modifier.fillMaxWidth()
+                            .selectable(selected = card == option, onClick = { card = option }, role = Role.RadioButton)
+                            .heightIn(min = 56.dp).padding(horizontal = 8.dp, vertical = 8.dp)
+                            .testTag("card_${option.name.lowercase()}"),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        RadioButton(selected = card == option, onClick = null, modifier = Modifier.padding(horizontal = 12.dp))
+                        Column {
+                            Text(option.title, style = MaterialTheme.typography.titleSmall)
+                            Text(option.hint, style = MaterialTheme.typography.bodyMedium, color = Pitch.Muted)
+                        }
                     }
                 }
             }
@@ -418,30 +471,37 @@ fun ReceiptScreen(vm: StoreViewModel, onDone: () -> Unit) {
     val order by vm.lastOrder.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var pdfError by remember { mutableStateOf<String?>(null) }
+    val entered = remember { MutableTransitionState(false).apply { targetState = true } }
     val o = order ?: run {
         MessageState(Icons.Filled.ShoppingCart, "No receipt yet", "Your receipt appears here after you pay.", "Back to the store", onDone)
         return
     }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).testTag("receipt_screen")) {
-        Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = Pitch.Win, modifier = Modifier.size(56.dp))
-            Spacer(Modifier.height(8.dp))
-            Text("Payment complete", style = MaterialTheme.typography.headlineMedium)
-            Text("Order ${o.order_id}", color = Pitch.Muted, modifier = Modifier.testTag("receipt_order_id"))
-            o.receipt.payload["paid_at"]?.jsonPrimitive?.contentOrNull?.let { Text("Paid $it", color = Pitch.Muted) }
-        }
-        Column(
-            Modifier.fillMaxWidth().padding(horizontal = 20.dp).clip(RoundedCornerShape(14.dp))
-                .border(1.dp, Pitch.Line, RoundedCornerShape(14.dp)).background(Color.White).padding(16.dp),
-        ) {
-            o.items.forEach { item ->
-                val name = vm.variant(item.variant_id)?.let { (p, v) -> "${p.name}, ${v.label.ifBlank { v.variant_id }}" } ?: item.variant_id
-                ReceiptLine("$name × ${item.quantity}", money(item.unit_price_minor * item.quantity))
+        AnimatedVisibility(visibleState = entered, enter = fadeIn() + scaleIn()) {
+            Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Box(
+                    Modifier.size(72.dp).clip(CircleShape).background(Pitch.Mint),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = Pitch.MintDeep, modifier = Modifier.size(44.dp))
+                }
+                Spacer(Modifier.height(8.dp))
+                Text("Payment complete", style = MaterialTheme.typography.headlineMedium)
+                Text("Order ${o.order_id}", color = Pitch.Muted, modifier = Modifier.testTag("receipt_order_id"))
+                o.receipt.payload["paid_at"]?.jsonPrimitive?.contentOrNull?.let { Text("Paid $it", color = Pitch.Muted) }
             }
-            HorizontalDivider(Modifier.padding(vertical = 8.dp), color = Pitch.Line)
-            ReceiptLine("Subtotal", money(o.subtotal_minor))
-            if (o.discount_minor > 0) ReceiptLine("Discount", "−" + money(o.discount_minor))
-            ReceiptLine("Total paid", money(o.total_minor), bold = true)
+        }
+        ChunkyCard(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
+            Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                o.items.forEach { item ->
+                    val name = vm.variant(item.variant_id)?.let { (p, v) -> "${p.name}, ${v.label.ifBlank { v.variant_id }}" } ?: item.variant_id
+                    ReceiptLine("$name × ${item.quantity}", money(item.unit_price_minor * item.quantity))
+                }
+                HorizontalDivider(Modifier.padding(vertical = 8.dp), color = Pitch.Line)
+                ReceiptLine("Subtotal", money(o.subtotal_minor))
+                if (o.discount_minor > 0) ReceiptLine("Discount", "−" + money(o.discount_minor))
+                ReceiptLine("Total paid", money(o.total_minor), bold = true)
+            }
         }
         Text(
             "Signed receipt ${o.receipt.signature.take(12)}…",

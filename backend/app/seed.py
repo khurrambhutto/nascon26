@@ -27,7 +27,7 @@ def reset(store, body=None):
     store.put("meta", "seed", seed)
     for config in sports():
         scoring.create_sport(store, config)
-    for tenant_id, name, color in (("tenant-alpha", "Alpha Sports", "#1565C0"), ("tenant-beta", "Beta Athletics", "#2E7D32")):
+    for tenant_id, name, color in (("tenant-alpha", "Alpha Sports", "#B84432"), ("tenant-beta", "Beta Athletics", "#2E7D32")):
         store.put("tenant", tenant_id, {"tenant_id": tenant_id, "name": name, "primary_color": color, "logo_url": None})
     clubs = [("club-alpha-1", "Alpha Falcons", "tenant-alpha"), ("club-alpha-2", "Alpha Wolves", "tenant-alpha"), ("demo-club-3", "Campus Tigers", "tenant-alpha"), ("demo-club-4", "City Eagles", "tenant-alpha"), ("club-beta-1", "Beta Lions", "tenant-beta")]
     for cid, name, tenant in clubs:

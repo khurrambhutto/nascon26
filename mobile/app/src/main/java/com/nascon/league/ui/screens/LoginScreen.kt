@@ -180,9 +180,9 @@ private fun PitchHero() {
                 size = androidx.compose.ui.geometry.Size(size.width - 32.dp.toPx(), size.height - 32.dp.toPx()), style = stroke)
         }
         Column(Modifier.align(Alignment.BottomStart).padding(start = 32.dp, bottom = 36.dp)) {
-            Text("NaSCon League", style = MaterialTheme.typography.headlineMedium, color = Color.White)
+            Text("arenaone.", style = MaterialTheme.typography.headlineMedium, color = Color.White)
             Text(
-                "Fixtures, tables and your club, live.",
+                "Fixtures, tables and your club. Game on.",
                 style = MaterialTheme.typography.bodyLarge,
                 color = Color.White.copy(alpha = 0.85f),
             )

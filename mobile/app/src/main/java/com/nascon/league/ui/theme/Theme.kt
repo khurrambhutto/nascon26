@@ -13,18 +13,28 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
-// Matchday palette. Turf is only the fallback: the signed-in tenant's colour replaces it.
+// ArenaOne palette (from mobile/design mockup): warm paper, deep teal ink, terracotta, mint and peach.
+// Primary is the signed-in tenant's colour; Turf is only the fallback before login.
 object Pitch {
-    val Chalk = Color(0xFFF6F8F5)      // background, cool pitch-line white
-    val Ink = Color(0xFF16212B)        // text
-    val Muted = Color(0xFF55626D)      // secondary text (4.5:1 on Chalk)
-    val Line = Color(0xFFDCE2DA)       // hairlines
-    val Wash = Color(0xFFEAEFE8)       // quiet fills (chips, inputs)
-    val Turf = Color(0xFF1E6B4B)       // default brand colour
-    val Floodlight = Color(0xFFFFD23F) // the "live" marker only
-    val Whistle = Color(0xFFC62F2F)    // errors and offline
-    val Win = Color(0xFF1E7A46)        // clinched / applied
+    val Chalk = Color(0xFFFFF7EE)      // paper background
+    val Card = Color(0xFFFFFFFF)       // raised cards and inputs
+    val Ink = Color(0xFF293D3A)        // text, dark surfaces
+    val Muted = Color(0xFF6F675F)      // secondary text (4.6:1 on paper)
+    val Line = Color(0xFFEADED2)       // hairlines and borders
+    val Edge = Color(0xFFDECFC0)       // darker bottom edge of chunky pills/cards
+    val Wash = Color(0xFFF7EBDF)       // quiet fills
+    val Turf = Color(0xFFB84432)       // terracotta fallback brand
+    val Mint = Color(0xFFBCE8D7)       // positive tiles, club banner
+    val MintSoft = Color(0xFFE0EEE6)   // soft mint fill (highlight rows)
+    val MintDeep = Color(0xFF326B59)   // text/icons on mint, "online"
+    val Peach = Color(0xFFF8DDCC)      // product art, number badges
+    val Floodlight = Color(0xFFEE644C) // the "live" dot
+    val Whistle = Color(0xFFC0392B)    // errors and offline
+    val Win = Color(0xFF2F7A5C)        // clinched / applied
 }
+
+/** A slightly darker shade of a colour, used for the chunky bottom edge of buttons and cards. */
+fun Color.edge(): Color = Color(red * 0.78f, green * 0.78f, blue * 0.78f, alpha)
 
 /** Android's built-in condensed sans: scoreboard numerals and headings, no font download needed. */
 val Condensed = FontFamily(
@@ -73,10 +83,10 @@ fun LeagueTheme(brand: Color = Pitch.Turf, content: @Composable () -> Unit) {
         onSurface = Pitch.Ink,
         surfaceVariant = Pitch.Wash,
         onSurfaceVariant = Pitch.Muted,
-        surfaceContainer = Color.White,
-        surfaceContainerHigh = Color.White,
+        surfaceContainer = Pitch.Card,
+        surfaceContainerHigh = Pitch.Card,
         surfaceContainerHighest = Pitch.Wash,
-        surfaceContainerLow = Color.White,
+        surfaceContainerLow = Pitch.Card,
         outline = Pitch.Muted,
         outlineVariant = Pitch.Line,
         error = Pitch.Whistle,
