@@ -39,6 +39,15 @@ interface LeagueApi {
     @GET("api/v1/clubs/{id}")
     suspend fun club(@Path("id") clubId: String): Club
 
+    @POST("api/v1/clubs/{id}/players")
+    suspend fun addPlayer(@Path("id") clubId: String, @Body body: AddPlayerRequest): kotlinx.serialization.json.JsonObject
+
+    @POST("api/v1/matches/{id}/status")
+    suspend fun setStatus(@Path("id") matchId: String, @Body body: StatusRequest): kotlinx.serialization.json.JsonObject
+
+    @POST("api/v1/matches/{id}/pin")
+    suspend fun pin(@Path("id") matchId: String, @Body body: PinRequest): MatchDetail
+
     @GET("api/v1/products")
     suspend fun products(): List<Product>
 
@@ -134,6 +143,7 @@ fun friendlyCode(code: String?): String = when (code) {
     "PLAYER_ON_LOAN" -> "The player is on loan, so they can't be moved until they return."
     "SQUAD_FULL" -> "The destination squad is full."
     "MIN_POSITION_VIOLATION" -> "This would leave the squad without enough players in that position."
+    "SPORT_NOT_FOUND" -> "That sport isn't set up on the server."
     "INVALID_BASE_VERSION" -> "Your phone had newer data than the server. Refresh and try again."
     else -> "The server refused this ($code)."
 }

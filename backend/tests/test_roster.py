@@ -92,3 +92,19 @@ def test_scenario_defaults_replacement_and_unknown_player(client):
     assert client.post("/audit/v1/roster/setup", json=body).status_code == 201
     assert client.get("/audit/v1/roster/history/p2?as_of=2026-10-01").json()["current_squad_id"] == "sa"
     assert client.get("/audit/v1/roster/history/missing").status_code == 404
+
+
+def test_manager_adds_player_to_own_club_only(client):
+    client.post("/audit/v1/reset")
+    login = lambda email: client.post("/api/v1/auth/login", json={"email": email, "password": "Nascon@26"}).json()["token"]
+    manager = {"Authorization": "Bearer " + login("manager@nascon.test")}
+    added = client.post("/api/v1/clubs/club-alpha-1/players", json={"name": "New Kid", "position": "fw", "reason": "Academy"}, headers=manager)
+    assert added.status_code == 201
+    pid = added.json()["player_id"]
+    roster_ids = [p["player_id"] for p in client.get("/api/v1/clubs/club-alpha-1", headers=manager).json()["roster"]]
+    assert pid in roster_ids
+    assert client.get(f"/audit/v1/roster/history/{pid}").json()["history"][0]["action"] == "add"
+    other = client.post("/api/v1/clubs/club-alpha-2/players", json={"name": "X", "position": "fw"}, headers=manager)
+    assert other.status_code == 403
+    bad = client.post("/api/v1/clubs/club-alpha-1/players", json={"position": "fw"}, headers=manager)
+    assert bad.status_code == 400

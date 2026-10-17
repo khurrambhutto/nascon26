@@ -22,12 +22,14 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
@@ -138,6 +140,22 @@ class RosterViewModel(private val clubId: String, private val leagueId: String) 
         }
     }
 
+    /** Adds a brand-new player to this club's squad (needs a connection). */
+    fun addPlayer(name: String, position: String, role: String, reason: String, onDone: () -> Unit) {
+        busy.value = true
+        viewModelScope.launch {
+            message.value = try {
+                repo.addPlayer(clubId, name, position, role, reason)
+                onDone()
+                BannerMessage("$name joined the squad.", BannerKind.Success)
+            } catch (e: Exception) {
+                BannerMessage(friendlyError(e), BannerKind.Error)
+            }
+            busy.value = false
+            load()
+        }
+    }
+
     fun dismiss() { message.value = null }
 }
 
@@ -162,6 +180,8 @@ fun RosterScreen(clubId: String, session: Session, onBack: () -> Unit) {
     var loanEnd by remember { mutableStateOf(LocalDate.now().plusDays(30).toString()) }
     var reason by remember { mutableStateOf("") }
     var confirm by remember { mutableStateOf(false) }
+    var adding by remember { mutableStateOf(false) }
+    val focus = LocalFocusManager.current
 
     Column(Modifier.fillMaxSize()) {
         ScreenHeader(title = "Manage squad", subtitle = (clubState as? UiState.Ready)?.data?.name, onBack = onBack)
@@ -182,6 +202,18 @@ fun RosterScreen(clubId: String, session: Session, onBack: () -> Unit) {
         }
         val club = (clubState as UiState.Ready).data
 
+        Row(Modifier.padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Pill("Move a player", selected = !adding, onClick = { adding = false }, modifier = Modifier.testTag("mode_move"))
+            Pill("Add a new player", selected = adding, onClick = { adding = true }, modifier = Modifier.testTag("mode_add"))
+        }
+        if (adding) {
+            AddPlayerForm(message, busy, vm::dismiss) { name, position, role, reason, onDone ->
+                focus.clearFocus()
+                vm.addPlayer(name, position, role, reason, onDone)
+            }
+            return
+        }
+
         // Validation messages written for people, shown next to the submit button.
         val problem = when {
             player == null -> "Pick a player."
@@ -193,7 +225,11 @@ fun RosterScreen(clubId: String, session: Session, onBack: () -> Unit) {
             else -> null
         }
 
-        Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
+        // After a result arrives, jump to the top so the message is visible.
+        val scroll = rememberScrollState()
+        LaunchedEffect(message) { if (message != null) scroll.animateScrollTo(0) }
+
+        Column(Modifier.weight(1f).verticalScroll(scroll)) {
             message?.let { Banner(it.text, it.kind, onDismiss = vm::dismiss) }
 
             SectionLabel("1. Player")
@@ -319,13 +355,63 @@ fun RosterScreen(clubId: String, session: Session, onBack: () -> Unit) {
                 TextButton(
                     onClick = {
                         confirm = false
+                        focus.clearFocus()
                         vm.submit(p, action, destination, effective, loanEnd, reason.trim(), session.user.user_id)
                         reason = ""
+                        destination = null
                     },
                     modifier = Modifier.testTag("confirm_roster"),
                 ) { Text("Confirm") }
             },
             dismissButton = { TextButton(onClick = { confirm = false }) { Text("Cancel") } },
         )
+    }
+}
+
+
+@Composable
+private fun AddPlayerForm(
+    message: BannerMessage?,
+    busy: Boolean,
+    onDismiss: () -> Unit,
+    onAdd: (String, String, String, String, () -> Unit) -> Unit,
+) {
+    var name by remember { mutableStateOf("") }
+    var position by remember { mutableStateOf("") }
+    var role by remember { mutableStateOf("substitute") }
+    var reason by remember { mutableStateOf("") }
+    val problem = when {
+        name.isBlank() -> "Enter the player's name."
+        position.isBlank() -> "Enter a position, for example gk, df or fw."
+        else -> null
+    }
+    Column(Modifier.verticalScroll(rememberScrollState())) {
+        message?.let { Banner(it.text, it.kind, onDismiss = onDismiss) }
+        SectionLabel("New player")
+        Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Full name") }, singleLine = true,
+                modifier = Modifier.fillMaxWidth().testTag("new_player_name"))
+            OutlinedTextField(value = position, onValueChange = { position = it }, label = { Text("Position") }, singleLine = true,
+                placeholder = { Text("For example gk, df, fw") }, modifier = Modifier.fillMaxWidth().testTag("new_player_position"))
+            Text("Role", style = MaterialTheme.typography.titleSmall)
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf("captain", "vice_captain", "starter", "substitute").forEach { r ->
+                    Pill(roleLabel(r), selected = role == r, onClick = { role = r }, modifier = Modifier.testTag("new_role_$r"))
+                }
+            }
+            OutlinedTextField(value = reason, onValueChange = { reason = it }, label = { Text("Note (optional)") },
+                placeholder = { Text("For example: academy graduate") }, modifier = Modifier.fillMaxWidth().testTag("new_player_reason"))
+            if (problem != null) Text(problem, style = MaterialTheme.typography.bodyMedium, color = Pitch.Muted)
+            PrimaryButton(
+                text = "Add player",
+                enabled = problem == null,
+                busy = busy,
+                onClick = {
+                    onAdd(name, position, role, reason.ifBlank { "New signing" }) { name = ""; position = ""; reason = "" }
+                },
+                modifier = Modifier.fillMaxWidth().testTag("add_player_button"),
+            )
+            Spacer(Modifier.height(24.dp))
+        }
     }
 }

@@ -1,6 +1,11 @@
 package com.nascon.league.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.runtime.LaunchedEffect
+import com.nascon.league.data.Product
+import com.nascon.league.ui.components.Pill
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -140,6 +145,33 @@ class MatchViewModel(private val matchId: String) : LoadViewModel<MatchDetail>()
         }
     }
 
+    val products = MutableStateFlow<List<Product>>(emptyList())
+
+    fun loadProducts() {
+        if (products.value.isNotEmpty()) return
+        viewModelScope.launch { products.value = runCatching { repo.products().data }.getOrDefault(emptyList()) }
+    }
+
+    /** Organizer: postpone / abandon / cancel / resume (server checks the state machine). */
+    fun setStatus(status: String, label: String) = online(label) { repo.setMatchStatus(matchId, status) }
+
+    /** Organizer: feature a store product on this match; connected clients update over the live stream. */
+    fun pin(productId: String?, label: String) = online(label) { repo.pinProduct(matchId, productId) }
+
+    private fun online(label: String, block: suspend () -> Unit) {
+        busy.value = true
+        viewModelScope.launch {
+            message.value = try {
+                block()
+                BannerMessage("$label done.", BannerKind.Success)
+            } catch (e: Exception) {
+                BannerMessage(friendlyError(e), BannerKind.Error)
+            }
+            busy.value = false
+            load()
+        }
+    }
+
     fun dismissMessage() { message.value = null }
 }
 
@@ -169,6 +201,12 @@ fun MatchScreen(matchId: String, session: Session, onBack: () -> Unit, onOpenPro
                     message?.let { m -> item { Banner(m.text, m.kind, onDismiss = vm::dismissMessage) } }
                     if (session.canScore(match.league_id)) {
                         item { ScoringPanel(match, sport, names, busy, vm::send) }
+                        item { StatusControls(match.status, busy, vm::setStatus) }
+                        item {
+                            val products by vm.products.collectAsStateWithLifecycle()
+                            LaunchedEffect(Unit) { vm.loadProducts() }
+                            PinControls(products, match.pinned_product?.product_id, busy, vm::pin)
+                        }
                     }
                     match.pinned_product?.let { product ->
                         item {
@@ -261,6 +299,9 @@ private fun outcomeText(match: MatchDetail, names: Map<String, String>): String 
     else -> when (match.status) {
         "in_progress" -> "In play"
         "upcoming" -> "Not started"
+        "postponed" -> "Waiting for a new date"
+        "abandoned" -> "Stopped before the end"
+        "cancelled" -> "Won't be played"
         else -> humanize(match.status)
     }
 }
@@ -328,7 +369,8 @@ private fun ScoringPanel(
                     modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("end_match"),
                 ) { Text("End match") }
             }
-            else -> Text("This match is finished. You can still undo a wrong event from the timeline.", color = Pitch.Muted)
+            "completed" -> Text("This match is finished. You can still undo a wrong event from the timeline.", color = Pitch.Muted)
+            else -> Text("Scoring is paused while the match is ${humanize(match.status).lowercase()}.", color = Pitch.Muted)
         }
     }
 
@@ -476,4 +518,70 @@ private fun PinnedProduct(name: String, fromPrice: Long?, onOpen: () -> Unit) {
         }
         TextButton(onClick = onOpen, modifier = Modifier.heightIn(min = 48.dp)) { Text("View item") }
     }
+}
+
+
+// ---------- Organizer: match status (FR-1.3 state machine) ----------
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun StatusControls(status: String, busy: Boolean, onChange: (String, String) -> Unit) {
+    // Only the moves the server allows from the current state are offered.
+    val options = when (status) {
+        "upcoming" -> listOf("postponed" to "Postpone", "cancelled" to "Cancel match")
+        "in_progress" -> listOf("postponed" to "Postpone", "abandoned" to "Abandon")
+        "postponed" -> listOf("upcoming" to "Reschedule as upcoming", "cancelled" to "Cancel match")
+        else -> emptyList()
+    }
+    if (options.isEmpty()) return
+    var pending by remember { mutableStateOf<Pair<String, String>?>(null) }
+    SectionLabel("Match status")
+    FlowRow(Modifier.padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        options.forEach { option ->
+            ScoreButton(option.second, enabled = !busy, tag = "status_${option.first}") { pending = option }
+        }
+    }
+    pending?.let { (next, label) ->
+        AlertDialog(
+            modifier = DialogTags,
+            onDismissRequest = { pending = null },
+            title = { Text("$label?") },
+            text = { Text("Everyone following this match sees the change straight away.") },
+            confirmButton = {
+                TextButton(onClick = { pending = null; onChange(next, label) }, modifier = Modifier.testTag("confirm_status")) { Text(label) }
+            },
+            dismissButton = { TextButton(onClick = { pending = null }) { Text("Keep as is") } },
+        )
+    }
+}
+
+// ---------- Organizer: pin a product (FR-2.3) ----------
+
+@Composable
+private fun PinControls(products: List<Product>, pinnedId: String?, busy: Boolean, onPin: (String?, String) -> Unit) {
+    if (products.isEmpty()) return
+    SectionLabel("Feature a store item")
+    Row(
+        Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 20.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        products.forEach { product ->
+            Pill(
+                text = product.name,
+                selected = product.product_id == pinnedId,
+                enabled = !busy,
+                onClick = {
+                    if (product.product_id == pinnedId) onPin(null, "Remove featured item")
+                    else onPin(product.product_id, "Feature ${product.name}")
+                },
+                modifier = Modifier.testTag("pin_${product.product_id}"),
+            )
+        }
+    }
+    Text(
+        if (pinnedId == null) "Tap an item to show it on this match." else "Tap the highlighted item again to remove it.",
+        style = MaterialTheme.typography.bodyMedium,
+        color = Pitch.Muted,
+        modifier = Modifier.padding(horizontal = 20.dp),
+    )
 }

@@ -105,9 +105,12 @@ fun MainShell(app: AppViewModel, session: Session) {
             }
         },
     ) { inner ->
+        // Role-aware home: club managers land on their club, everyone else on matches.
+        val home = if (session.user.role == "club_manager") "club" else "fixtures"
+        androidx.compose.runtime.CompositionLocalProvider(com.nascon.league.ui.components.LocalTenant provides session.tenant) {
         NavHost(
             navController = nav,
-            startDestination = "fixtures",
+            startDestination = home,
             modifier = Modifier.fillMaxSize().padding(inner).consumeWindowInsets(inner).imePadding(),
         ) {
             val back: () -> Unit = { nav.popBackStack() }
@@ -150,6 +153,7 @@ fun MainShell(app: AppViewModel, session: Session) {
             }
             composable("sync") { SyncScreen(app, onBack = back) }
             composable("settings") { SettingsScreen(onBack = back) }
+        }
         }
     }
 }

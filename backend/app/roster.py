@@ -171,3 +171,30 @@ def history(store, player_id, as_of=None):
         else:
             current = {"squad_id": entry["to_squad_id"], "parent_squad_id": entry["from_squad_id"] if entry["action"] == "loan" else None}
     return {"player_id": player_id, "as_of": requested.isoformat(), "league_id": player["league_id"], "current_squad_id": current["squad_id"] if current else None, "parent_squad_id": current.get("parent_squad_id") if current else None, "history": player["history"]}
+
+
+def add_player(store, club_id, body, user):
+    """Register a new player in the club's squad (mobile roster 'add'). Writes an audit entry."""
+    obj(body)
+    name = text(body.get("name"), "name", 80)
+    position = text(body.get("position"), "position", 40)
+    role = body.get("role", "substitute")
+    check(role in ("captain", "vice_captain", "starter", "substitute"), "role")
+    reason = text(body.get("reason", "New signing"), "reason", 200)
+    squad = next((s for s in store.all("squad") if s["club_id"] == club_id), None)
+    if squad is None:
+        fail(404, "SQUAD_NOT_FOUND")
+    lid = squad["league_id"]
+    league = store.require("roster_league", lid, "LEAGUE_NOT_FOUND")
+    players = [p for p in store.all("player") if p["league_id"] == lid]
+    if sum(p["registration"] is not None and p["registration"]["squad_id"] == squad["squad_id"] for p in players) >= league["max_squad_size"]:
+        fail(409, "SQUAD_FULL")
+    pid = f"player-{squad['squad_id']}-{len(players) + 1:03d}"
+    while store.get("player", pid):
+        pid += "x"
+    today = date.today().isoformat()
+    registration = {"player_id": pid, "league_id": lid, "squad_id": squad["squad_id"], "parent_squad_id": None, "registration_type": "initial", "start_date": today, "loan_end_date": None, "role": role}
+    audit = {"audit_id": "au-0001", "action": "add", "player_id": pid, "league_id": lid, "from_squad_id": None, "to_squad_id": squad["squad_id"], "effective_date": today, "state": "active", "who": user["user_id"], "when": now(), "why": reason}
+    player = {"player_id": pid, "name": name, "position": position, "squad_id": squad["squad_id"], "role": role, "league_id": lid, "registration": registration, "initial_registration": deepcopy(registration), "history": [audit], "pending": None}
+    store.put("player", pid, player)
+    return {"player_id": pid, "status": "added", "registration": registration, "audit_entry": audit}

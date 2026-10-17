@@ -180,6 +180,18 @@ class Repository(context: Context) {
         return network { api.checkout(request) }
     }
 
+    // ---------- Online-only organizer/manager actions ----------
+
+    suspend fun addPlayer(clubId: String, name: String, position: String, role: String, reason: String) {
+        network { api.addPlayer(clubId, AddPlayerRequest(name.trim(), position.trim(), role, reason.trim())) }
+    }
+
+    suspend fun setMatchStatus(matchId: String, status: String) {
+        network { api.setStatus(matchId, StatusRequest(status)) }
+    }
+
+    suspend fun pinProduct(matchId: String, productId: String?): MatchDetail = network { api.pin(matchId, PinRequest(productId)) }
+
     // ---------- Actions that work offline ----------
 
     /** Appends a match event, or queues it when offline. baseVersion = match version the user saw. */

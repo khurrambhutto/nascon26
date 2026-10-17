@@ -306,3 +306,13 @@ data class ErrorDetail(val code: String, val message: String = "", val details: 
 
 @Serializable
 data class ErrorBody(val error: ErrorDetail)
+
+// ---------- Mobile-only actions ----------
+@Serializable
+data class AddPlayerRequest(val name: String, val position: String, val role: String, val reason: String)
+
+@Serializable
+data class StatusRequest(val status: String)
+
+@Serializable
+data class PinRequest(val product_id: String?)

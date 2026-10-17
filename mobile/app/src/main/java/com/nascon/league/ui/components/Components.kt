@@ -106,6 +106,25 @@ fun ConnectionStrip(connection: Connection, pendingCount: Int, onClick: () -> Un
     }
 }
 
+// ---------- Tenant branding ----------
+
+/** The signed-in tenant, so every top-level header can show its logo mark. */
+val LocalTenant = androidx.compose.runtime.staticCompositionLocalOf<com.nascon.league.data.Tenant?> { null }
+
+/** Tenant logo mark: initials on the tenant colour (logo_url is not set in the seed data). */
+@Composable
+fun TenantMark(tenant: com.nascon.league.data.Tenant) {
+    val brand = MaterialTheme.colorScheme.primary
+    Box(
+        Modifier.size(36.dp).clip(RoundedCornerShape(10.dp)).background(brand)
+            .semantics { contentDescription = "${tenant.name} logo" },
+        contentAlignment = Alignment.Center,
+    ) {
+        val initials = tenant.name.split(' ').filter { it.isNotBlank() }.take(2).joinToString("") { it.first().uppercase() }
+        Text(initials, color = contentOn(brand), fontFamily = Condensed, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+    }
+}
+
 // ---------- Screen header ----------
 
 @Composable
@@ -119,10 +138,14 @@ fun ScreenHeader(
         Modifier.fillMaxWidth().padding(start = if (onBack == null) 20.dp else 4.dp, end = 8.dp, top = 12.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        val tenant = LocalTenant.current
         if (onBack != null) {
             IconButton(onClick = onBack, modifier = Modifier.testTag("back_button")) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
             }
+        } else if (tenant != null) {
+            TenantMark(tenant)
+            Spacer(Modifier.width(12.dp))
         }
         Column(Modifier.weight(1f)) {
             Text(

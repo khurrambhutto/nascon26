@@ -352,6 +352,15 @@ def club_profile(club_id: str, request: Request):
         return {**club, "roster": players}
 
 
+@app.post("/api/v1/clubs/{club_id}/players", response_model=dict, status_code=201)
+def add_club_player(club_id: str, request: Request, body: dict = Body(...)):
+    """Club Manager adds a new player to their own club's squad (mobile roster screen)."""
+    with transaction() as db:
+        user = auth.authenticate(db, request.headers.get("authorization"))
+        auth.authorize(db, user, "roster", club_id)
+        return roster.add_player(db, club_id, body, user)
+
+
 @app.get("/api/v1/products", response_model=list[dict])
 def products(request: Request):
     with transaction() as db:
