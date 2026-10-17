@@ -42,6 +42,13 @@
       "height": 1254,
       "format": "PNG RGBA",
       "sha256": "21d8aa8add3f2fdd7fda8529db1800fe8fb861d7e495c369906e413cccfbebab"
+    },
+    {
+      "path": "brand/arenaone-app-icon.png",
+      "width": 1254,
+      "height": 1254,
+      "format": "PNG RGBA",
+      "sha256": "031a9618ca5ac00bc7674b57dcabcfd414845c8f665583925d835ce7b0b46a28"
     }
   ]
 }

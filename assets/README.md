@@ -1,9 +1,10 @@
 # ArenaOne demo assets
 
-Original demo artwork generated with the built-in GPT Image tool for ArenaOne's coral, mint, and cream palette. All six images are 1254 × 1254 transparent RGBA PNGs.
+Original demo artwork generated with the built-in GPT Image tool for ArenaOne's coral, mint, and cream palette. Dimensions and checksums for each transparent RGBA PNG are recorded in `manifest.json`.
 
 | File | Intended use |
 |---|---|
+| `brand/arenaone-app-icon.png` | ArenaOne app icon concept; generation prompt in `brand/prompt.txt` |
 | `clubs/lions-fc.png` | Lions FC crest |
 | `clubs/eagles-fc.png` | Eagles FC crest |
 | `clubs/wolves-fc.png` | Wolves FC crest |
