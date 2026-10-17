@@ -1,5 +1,8 @@
 package com.nascon.league.ui.screens
 
+import androidx.compose.foundation.Image
+import androidx.compose.ui.res.painterResource
+import com.nascon.league.R
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
@@ -228,13 +231,12 @@ private fun ProductCard(product: Product, index: Int, onClick: () -> Unit) {
                 Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(14.dp)).background(tile),
                 contentAlignment = Alignment.Center,
             ) {
-                Text(
-                    product.name.take(1).uppercase(),
-                    color = Pitch.Ink,
-                    fontFamily = Condensed,
-                    fontWeight = FontWeight.Bold,
-                    style = MaterialTheme.typography.displayMedium,
-                )
+                if (product.name.contains("jersey", ignoreCase = true)) {
+                    Image(painterResource(R.drawable.club_jersey), contentDescription = "Club jersey illustration", modifier = Modifier.fillMaxSize().padding(12.dp))
+                } else {
+                    Text(product.name.take(1).uppercase(), color = Pitch.Ink, fontFamily = Condensed,
+                        fontWeight = FontWeight.Bold, style = MaterialTheme.typography.displayMedium)
+                }
             }
             Spacer(Modifier.height(10.dp))
             Text(product.name, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -288,13 +290,12 @@ fun ProductScreen(vm: StoreViewModel, productId: String, onBack: () -> Unit, onO
                 Modifier.fillMaxWidth().aspectRatio(1.4f).clip(RoundedCornerShape(20.dp)).background(Pitch.Peach),
                 contentAlignment = Alignment.Center,
             ) {
-                Text(
-                    product.name.take(1).uppercase(),
-                    color = Pitch.Ink,
-                    fontFamily = Condensed,
-                    fontWeight = FontWeight.Bold,
-                    style = MaterialTheme.typography.displayLarge,
-                )
+                if (product.name.contains("jersey", ignoreCase = true)) {
+                    Image(painterResource(R.drawable.club_jersey), contentDescription = "Club jersey illustration", modifier = Modifier.fillMaxSize().padding(12.dp))
+                } else {
+                    Text(product.name.take(1).uppercase(), color = Pitch.Ink, fontFamily = Condensed,
+                        fontWeight = FontWeight.Bold, style = MaterialTheme.typography.displayLarge)
+                }
             }
             Spacer(Modifier.height(16.dp))
             Text(selected?.let { money(it.price_minor, it.currency) } ?: "", style = MaterialTheme.typography.headlineSmall)
@@ -480,10 +481,10 @@ fun ReceiptScreen(vm: StoreViewModel, onDone: () -> Unit) {
         AnimatedVisibility(visibleState = entered, enter = fadeIn() + scaleIn()) {
             Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Box(
-                    Modifier.size(72.dp).clip(CircleShape).background(Pitch.Mint),
+                    Modifier.size(144.dp).clip(RoundedCornerShape(20.dp)).background(Pitch.Mint),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = Pitch.MintDeep, modifier = Modifier.size(44.dp))
+                    Image(painterResource(R.drawable.club_victory), contentDescription = null, modifier = Modifier.fillMaxSize().padding(8.dp))
                 }
                 Spacer(Modifier.height(8.dp))
                 Text("Payment complete", style = MaterialTheme.typography.headlineMedium)

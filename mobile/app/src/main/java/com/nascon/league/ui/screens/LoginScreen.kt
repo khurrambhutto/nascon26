@@ -1,5 +1,9 @@
 package com.nascon.league.ui.screens
 
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.res.painterResource
+import com.nascon.league.R
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
@@ -174,6 +178,8 @@ private fun PitchHero() {
         Box(Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Brush.verticalGradient(
             listOf(Color.Transparent, Pitch.Turf.copy(alpha = 0.85f)))))
         Column(Modifier.align(Alignment.BottomStart).padding(start = 32.dp, bottom = 36.dp)) {
+            Image(painterResource(R.drawable.arenaone_logo), contentDescription = "ArenaOne logo", modifier = Modifier.size(64.dp))
+            Spacer(Modifier.height(8.dp))
             Text("arenaone.", style = MaterialTheme.typography.headlineMedium, color = Color.White)
             Text(
                 "Fixtures, tables and your club. Game on.",

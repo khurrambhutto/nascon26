@@ -19,6 +19,9 @@ import androidx.compose.material3.ripple
 import androidx.compose.runtime.remember
 import androidx.compose.ui.semantics.Role
 import com.nascon.league.ui.theme.edge
+import androidx.compose.foundation.Image
+import androidx.compose.ui.res.painterResource
+import com.nascon.league.R
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -311,9 +314,20 @@ fun ScoreTile(value: String, size: Dp = 40.dp, modifier: Modifier = Modifier, on
     }
 }
 
-/** Team crest stand-in: initials on a colour derived from the team id (same team = same colour). */
+/** Bundled crests for known club names, with initials for other clubs. */
 @Composable
 fun TeamBadge(name: String, id: String, size: Dp = 36.dp) {
+    val crest = when {
+        name.contains("lions", ignoreCase = true) -> R.drawable.crest_lions
+        name.contains("eagles", ignoreCase = true) -> R.drawable.crest_eagles
+        name.contains("wolves", ignoreCase = true) -> R.drawable.crest_wolves
+        name.contains("bears", ignoreCase = true) -> R.drawable.crest_bears
+        else -> null
+    }
+    if (crest != null) {
+        Image(painterResource(crest), contentDescription = "$name crest", modifier = Modifier.size(size))
+        return
+    }
     val hues = listOf(0xFF2F6FAD, 0xFF8E3B46, 0xFF2E7D5B, 0xFF6B4FA0, 0xFFB5652B, 0xFF37606B, 0xFF9C4A8B, 0xFF5A6B2E)
     val color = Color(hues[id.hashCode().absoluteValue % hues.size])
     val initials = name.split(' ', '-', '_').filter { it.isNotBlank() }.take(2).joinToString("") { it.first().uppercase() }
