@@ -168,17 +168,11 @@ private fun PitchHero() {
     Box(
         Modifier.fillMaxWidth().background(Pitch.Turf).statusBarsPadding().height(220.dp),
     ) {
-        Canvas(Modifier.fillMaxSize()) {
-            val chalk = Color.White.copy(alpha = 0.16f)
-            val stroke = Stroke(width = 2.dp.toPx())
-            val cx = size.width * 0.78f
-            val cy = size.height * 0.5f
-            drawLine(chalk, Offset(cx, 0f), Offset(cx, size.height), strokeWidth = stroke.width)
-            drawCircle(chalk, radius = size.height * 0.32f, center = Offset(cx, cy), style = stroke)
-            drawCircle(chalk, radius = 4.dp.toPx(), center = Offset(cx, cy))
-            drawRect(chalk, topLeft = Offset(16.dp.toPx(), 16.dp.toPx()),
-                size = androidx.compose.ui.geometry.Size(size.width - 32.dp.toPx(), size.height - 32.dp.toPx()), style = stroke)
-        }
+        // Animated bouncing ball over chalk pitch lines, behind the title.
+        com.nascon.league.ui.components.AnimatedPitch(Modifier.fillMaxSize())
+        // Soft bottom scrim keeps the title readable over the animation.
+        Box(Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Brush.verticalGradient(
+            listOf(Color.Transparent, Pitch.Turf.copy(alpha = 0.85f)))))
         Column(Modifier.align(Alignment.BottomStart).padding(start = 32.dp, bottom = 36.dp)) {
             Text("arenaone.", style = MaterialTheme.typography.headlineMedium, color = Color.White)
             Text(
@@ -189,3 +183,4 @@ private fun PitchHero() {
         }
     }
 }
+
