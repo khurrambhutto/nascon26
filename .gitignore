@@ -1,0 +1,56 @@
+# --- Prep material (NOT part of the competition repo) ---
+demo/
+pull-images.sh
+VERSIONS.md
+AGENTS.md
+CLAUDE.md
+*.pdf
+.claude/
+
+# --- Secrets: DAY1_SALT must never be committed ---
+.env
+.env.*
+!.env.example
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+.venv/
+.venv-*/
+venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.db
+*.sqlite3
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+allure-results/
+allure-report/
+report.html
+
+# --- Android / Gradle (keep mobile/release/app-release.apk!) ---
+.gradle/
+build/
+local.properties
+.kotlin/
+.cxx/
+.externalNativeBuild/
+captures/
+*.iml
+.idea/
+*.jks
+*.keystore
+mobile/app/release/
+*.apk
+!mobile/release/app-release.apk
+
+# --- Node / misc ---
+node_modules/
+.DS_Store
+Thumbs.db
+*.log
+.vscode/
