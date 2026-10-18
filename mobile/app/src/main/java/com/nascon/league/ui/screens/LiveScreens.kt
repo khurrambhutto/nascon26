@@ -91,7 +91,7 @@ fun GoLiveScreen(onBack: () -> Unit) {
         Text(message, modifier = Modifier.testTag("golive_status"))
         val current = key
         if (current != null && granted) {
-            Box(Modifier.fillMaxWidth().aspectRatio(3f / 4f).testTag("golive_preview")) { MediaWebView(mediaUrl("live/$current/publish/"), Modifier.fillMaxSize()) }
+            Box(Modifier.fillMaxWidth().aspectRatio(3f / 4f).testTag("golive_preview")) { MediaWebView(mediaUrl("live/$current/publish"), Modifier.fillMaxSize()) }
             Text("RTMP for OBS: rtmp://<laptop>:1935/live/$current", style = MaterialTheme.typography.bodySmall)
             OutlinedButton(onClick = {
                 scope.launch { ServiceLocator.repo.myStreamKey("revoke"); key = null; message = "Broadcast ended. The recording appears in your VOD archive." }
