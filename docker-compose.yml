@@ -45,6 +45,7 @@ services:
       DAY1_SALT: ${DAY1_SALT}
       DAY2_SALT: ${DAY2_SALT}
       MEDIA_API_URL: http://media:9997
+      QR_PUBLIC_BASE_URL: ${QR_PUBLIC_BASE_URL:-http://localhost:8080}
       COMPOSER_GRID_URL: http://selenium-hub:4444
       JWT_SECRET: ${JWT_SECRET:-}
       OBJECT_STORE_URL: http://object-store:9000

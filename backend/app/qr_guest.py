@@ -1,4 +1,5 @@
 """FR-4.x dynamic QR deep links, privacy-safe scan telemetry, guest tokens and atomic cart merge."""
+import os
 import secrets
 import time
 from datetime import datetime, timezone
@@ -11,7 +12,9 @@ from reportlab.pdfgen import canvas
 from . import scoring
 from .common import check, fail, obj, sign2
 
-BASE_URL = "http://localhost:8080"
+BASE_URL = "http://localhost:8080"  # contract value returned by the API
+# What printed QR images encode; set to http://<laptop-LAN-IP>:8080 so any phone on the network can scan.
+PUBLIC_BASE_URL = os.environ.get("QR_PUBLIC_BASE_URL", BASE_URL).rstrip("/")
 MATCH_ROUTES = {"upcoming": "preview", "in_progress": "live", "completed": "vod"}
 GUEST_PREFIX = "guest_anon_tok_"
 
@@ -106,7 +109,7 @@ def matrix(text):
 
 def export(store, entity_id, fmt):
     record = mapping(store, entity_id, create=False)
-    short_url = f"{BASE_URL}/q/{record['short_code']}"
+    short_url = f"{PUBLIC_BASE_URL}/q/{record['short_code']}"
     cells, border = matrix(short_url), 4
     size = len(cells) + 2 * border
     if fmt == "svg":
