@@ -6,6 +6,8 @@ Run: pytest tests/appium --junitxml=tests/reports/appium-report.xml
 """
 import json
 import os
+import re
+import subprocess
 import time
 import urllib.request
 from pathlib import Path
@@ -44,7 +46,7 @@ def phone():
     assert status["value"]["ready"] is True
     options = UiAutomator2Options().load_capabilities({
         "platformName": "Android", "appium:automationName": "UiAutomator2", "appium:app": APK,
-        "appium:appPackage": PACKAGE, "appium:autoGrantPermissions": True, "appium:newCommandTimeout": 120,
+        "appium:appPackage": PACKAGE, "appium:autoGrantPermissions": True, "appium:enforceAppInstall": True, "appium:newCommandTimeout": 120,
     })
     driver = webdriver.Remote(APPIUM, options=options)
     call("/audit/v1/reset", {})
@@ -52,24 +54,25 @@ def phone():
     driver.quit()
 
 
-def open_link(driver, url):
-    started = time.monotonic()
-    driver.execute_script("mobile: deepLink", {"url": url, "package": PACKAGE})
-    WebDriverWait(driver, 2).until(lambda d: d.find_elements(*by_tag("deeplink_screen")))
-    return time.monotonic() - started
+def open_link(driver, url, entity):
+    """Fire the spec's exact intent and return the launch time Android reports (ms)."""
+    output = subprocess.run(["adb", "shell", "am", "start", "-W", "-a", "android.intent.action.VIEW", "-d", url],
+                            capture_output=True, text=True, timeout=10).stdout
+    WebDriverWait(driver, 5, poll_frequency=0.2).until(
+        lambda d: [e for e in d.find_elements(*by_tag("deeplink_entity_id")) if e.text == entity])
+    return int(re.search(r"TotalTime: (\d+)", output).group(1))
 
 
 @pytest.mark.parametrize("url,entity", [("nascon://entity/match-m1", "match-m1"), ("nascon://stream/cs-session-101", "cs-session-101")])
 def test_deep_link_opens_native_screen_without_login(phone, url, entity):
-    assert open_link(phone, url) < 2.0
-    assert phone.find_element(*by_tag("deeplink_entity_id")).text == entity
+    assert open_link(phone, url, entity) < 2000
     assert not phone.find_elements(*by_tag("login_button"))
 
 
 def test_cross_surface_costream_chat_sync(phone):
     call("/audit/v1/costream/session", {"session_id": "cs-session-101", "host_player_id": "player-alpha-1",
                                         "participants": ["player-alpha-1", "player-alpha-2"], "layout": "grid_2"})
-    open_link(phone, "nascon://stream/cs-session-101")  # the mobile app joins the co-stream
+    open_link(phone, "nascon://stream/cs-session-101", "cs-session-101")  # the mobile app joins the co-stream
     options = selenium_webdriver.ChromeOptions()
     options.add_argument("--headless=new")
     browser = selenium_webdriver.Remote(command_executor=GRID, options=options)
@@ -81,8 +84,9 @@ def test_cross_surface_costream_chat_sync(phone):
         call("/api/v1/chat", {"chat_room_id": "chat-cs-session-101", "text": text}, token)
         sent = time.monotonic()
         WebDriverWait(browser, 3).until(lambda d: text in chat.text)
-        WebDriverWait(phone, 3).until(lambda d: text in d.find_element(*by_tag("deeplink_chat")).text
-                                      or d.find_elements(AppiumBy.ANDROID_UIAUTOMATOR, f'new UiSelector().textContains("{text}")'))
+        phone.get_screenshot_as_file(str(Path(__file__).resolve().parents[1] / "reports" / "appium-costream.png"))
+        WebDriverWait(phone, 3, poll_frequency=0.2).until(
+            lambda d: d.find_elements(AppiumBy.ANDROID_UIAUTOMATOR, f'new UiSelector().textContains("{text}")'))
         assert time.monotonic() - sent < 3.0
     finally:
         browser.quit()

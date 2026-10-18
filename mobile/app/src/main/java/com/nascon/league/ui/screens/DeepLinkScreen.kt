@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
@@ -63,10 +64,10 @@ fun DeepLinkScreen(link: DeepLink, onClose: () -> Unit) {
                     "${message["sender"]?.jsonPrimitive?.content}: ${message["text"]?.jsonPrimitive?.content}"
                 }.orEmpty()
             }
-            delay(2000)
+            delay(500)
         }
     }
-    Column(Modifier.fillMaxSize().padding(20.dp).testTag("deeplink_screen"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(Modifier.fillMaxSize().statusBarsPadding().padding(20.dp).testTag("deeplink_screen"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(if (link.isCostream) "Co-stream" else if (link.isMatch) "Match Live" else "ArenaOne",
             style = MaterialTheme.typography.headlineMedium, modifier = Modifier.testTag("deeplink_title"))
         Text(link.id, modifier = Modifier.testTag("deeplink_entity_id"))

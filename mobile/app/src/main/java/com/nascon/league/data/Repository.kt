@@ -230,8 +230,9 @@ class Repository(context: Context) {
         })
     }
     /** Public data for nascon:// deep links; null when the backend is unreachable. */
-    suspend fun publicMatch(id: String) = runCatching { api.publicMatch(id) }.getOrNull()
-    suspend fun chatRoom(room: String) = runCatching { api.chatRoom(room) }.getOrNull()
+    // Raw JSON (the payloads contain nulls, e.g. "reason": null), parsed without a model class.
+    suspend fun publicMatch(id: String) = runCatching { AppJson.parseToJsonElement(api.publicMatch(id).string()).jsonObject }.getOrNull()
+    suspend fun chatRoom(room: String) = runCatching { AppJson.parseToJsonElement(api.chatRoom(room).string()).jsonObject }.getOrNull()
 
     suspend fun match(id: String): Loaded<MatchDetail> {
         val loaded = cached("match/$id", MatchDetail.serializer()) { api.match(id) }
