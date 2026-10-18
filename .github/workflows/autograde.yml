@@ -1,0 +1,75 @@
+name: autograde
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  stack:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      # Real salts come from repository secrets; CI falls back to throwaway values.
+      DAY1_SALT: ${{ secrets.DAY1_SALT || 'ci-day1-salt-000' }}
+      DAY2_SALT: ${{ secrets.DAY2_SALT || 'ci-day2-salt-000' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Backend unit tests + coverage
+        run: |
+          python -m pip install -q -r backend/requirements.txt
+          python -m pytest backend/tests --cov=backend/app --cov-report=json:backend/coverage.json -q
+          python tests/write_coverage.py
+
+      - name: Start full stack
+        run: |
+          docker compose up -d --build
+          for i in $(seq 1 60); do curl -sf localhost:8080/health && break; sleep 2; done
+          curl -sf localhost:8080/health
+          docker compose ps
+
+      - name: Contract probes
+        run: |
+          J='-H content-type:application/json'
+          curl -sf -XPOST localhost:8080/audit/v1/reset > /dev/null
+          curl -sf localhost:8080/audit/v1/qr/match-m1 | grep -q '/web/matches/match-m1/live'
+          test "$(curl -s -o /dev/null -w '%{http_code}' localhost:8080/q/m1-live)" = 302
+          for p in /api/v1/chat /audit/v1/checkout /audit/v1/events; do
+            test "$(curl -s -o /dev/null -w '%{http_code}' $J -H 'Authorization: Bearer guest_anon_tok_7721' -d '{}' localhost:8080$p)" = 403
+          done
+          test "$(curl -s -o /dev/null -w '%{http_code}' $J -d '{"action":"generate","player_id":"player-alpha-1"}' localhost:8080/audit/v1/stream/key)" = 201
+          curl -sf localhost:8080/metrics | grep -q nascon_qr_scans_total
+
+      - name: Selenium Grid 4 has 3 ready nodes
+        run: |
+          for i in $(seq 1 60); do
+            curl -s localhost:4444/status | python3 -c "import json,sys; v=json.load(sys.stdin)['value']; sys.exit(0 if v['ready'] and len(v['nodes']) >= 3 else 1)" && break
+            sleep 2
+          done
+          curl -s localhost:4444/status | python3 -c "import json,sys; v=json.load(sys.stdin)['value']; assert v['ready'] and len(v['nodes']) >= 3"
+
+      - name: Selenium guest web player suite (3 parallel grid sessions)
+        run: |
+          python -m pip install -q selenium==4.51.0 pytest-xdist
+          mkdir -p tests/reports
+          SELENIUM_APP_URL=http://backend:8080 python -m pytest -n 3 tests/selenium --junitxml=tests/reports/selenium-report.xml -q
+
+      - name: k6 load profile (NFR-2)
+        run: |
+          curl -sf -XPOST localhost:8080/audit/v1/reset > /dev/null
+          docker run --rm --network host --user "$(id -u)" -v "$PWD/tests:/tests" grafana/k6:0.54.0 run --summary-export=/tests/reports/k6-summary.json /tests/k6_load.js
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reports
+          path: tests/reports/
+
+      - name: Logs on failure
+        if: failure()
+        run: docker compose logs --tail=200

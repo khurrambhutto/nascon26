@@ -268,3 +268,47 @@ def test_athlete_profile_and_follow_graph(client, login):
     assert client.delete("/api/v1/athletes/player-alpha-1/follow", headers=viewer).json()["follower_count"] == 1
     assert client.put("/api/v1/athletes/player-alpha-1/follow", headers=GUEST).json()["error"]["code"] == "GUEST_WRITE_FORBIDDEN"
     assert client.put("/api/v1/athletes/ghost/follow", headers=viewer).status_code == 404
+
+
+class FakeReply:
+    def __init__(self, data):
+        self.data = json.dumps(data).encode()
+
+    def read(self, *args):
+        return self.data
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return False
+
+
+def test_media_server_kick_and_stats(monkeypatch):
+    calls = []
+
+    def fake_urlopen(target, timeout=None):
+        url = target if isinstance(target, str) else target.full_url
+        calls.append(url)
+        if url.endswith("/v3/paths/list"):
+            return FakeReply({"items": [{"name": "live/k", "ready": True, "bytesReceived": 125000}, {"name": "live/x", "ready": False}]})
+        if url.endswith("/list"):
+            return FakeReply({"items": [{"id": "c1", "path": "live/sk_live_a"}, {"id": "c2", "path": "live/other"}]})
+        return FakeReply({})
+
+    monkeypatch.setattr(streaming, "MEDIA_API", "http://media:9997")
+    monkeypatch.setattr(streaming.urllib.request, "urlopen", fake_urlopen)
+    streaming.kick_sessions("sk_live_a")
+    assert "http://media:9997/v3/rtmpconns/kick/c1" in calls and not any("kick/c2" in c for c in calls)
+    monkeypatch.setattr(streaming, "last_sample", [0, 0.0])
+    assert streaming.media_stats() == (1, 0.0)
+    count, kbps = streaming.media_stats()
+    assert count == 1 and kbps == 0.0
+
+    def broken(target, timeout=None):
+        raise OSError("media down")
+    monkeypatch.setattr(streaming.urllib.request, "urlopen", broken)
+    streaming.kick_sessions("sk_live_a")
+    assert streaming.media_stats() == (0, 0.0)
+    monkeypatch.setattr(streaming.threading, "Thread", lambda target, args, daemon: type("T", (), {"start": lambda self: target(*args)})())
+    streaming.sever("sk_live_a")
