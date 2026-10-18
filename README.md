@@ -2,6 +2,19 @@
 
 Self-hosted multi-sport leagues, append-only scoring, standings, club rosters and a concurrency-safe merchandise store.
 
+## Part II (Day 2) quick start
+
+```bash
+DAY1_SALT=<s1> DAY2_SALT=<s2> docker compose up -d --build   # API :8080, MediaMTX :1935/:8888/:8889, Selenium Grid :4444
+curl -s -XPOST localhost:8080/audit/v1/reset
+open http://localhost:8080/q/m1-live                           # guest web player (no login)
+ffmpeg -re -f lavfi -i testsrc -c:v libx264 -f flv rtmp://localhost:1935/live/<stream_key>   # key from POST /audit/v1/stream/key
+```
+
+QA: `pytest backend/tests` · `pytest -n 3 tests/selenium` · `pytest tests/appium` (phone via USB, `adb reverse tcp:8080 tcp:8080`, also 8889/8189 for video) ·
+`docker run --rm --network host -v "$PWD/tests:/tests" grafana/k6:0.54.0 run /tests/k6_load.js`. Reports go to `tests/reports/`.
+Requirement map: `TRACEABILITY.md` (Part II section). Decisions: `ADR.md`.
+
 ## Run the backend
 
 Set the organizer-provided `DAY1_SALT` in your shell; never commit the real value.
