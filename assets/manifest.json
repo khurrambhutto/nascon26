@@ -49,6 +49,120 @@
       "height": 1254,
       "format": "PNG RGBA",
       "sha256": "031a9618ca5ac00bc7674b57dcabcfd414845c8f665583925d835ce7b0b46a28"
+    },
+    {
+      "path": "brand/arenaone-logo-v2.png",
+      "width": 1254,
+      "height": 1254,
+      "format": "PNG RGBA",
+      "sha256": "e907c9f04a89d549b1711c1d634de75b1b911c3217580b0bede5375b47307d9d"
+    },
+    {
+      "path": "clubs/cricket/karakoram-falcons-cc.png",
+      "width": 1225,
+      "height": 1284,
+      "format": "PNG RGBA",
+      "sha256": "61a9838c7ab8b6dfe23f3ae0da24b431b3542cd69c186590ca93833a2d142010"
+    },
+    {
+      "path": "clubs/cricket/indus-strikers-cc.png",
+      "width": 1225,
+      "height": 1284,
+      "format": "PNG RGBA",
+      "sha256": "a8319696adeeb511425a4e85529a1de5a2c183ab606d5a19800dcd91f9bfc971"
+    },
+    {
+      "path": "clubs/cricket/lahore-thunder-cc.png",
+      "width": 1212,
+      "height": 1297,
+      "format": "PNG RGBA",
+      "sha256": "428f00b2140bd83837850045e7c6ae865265ac18eb3cde6927f01b20eae9abd2"
+    },
+    {
+      "path": "clubs/cricket/coastal-sharks-cc.png",
+      "width": 1199,
+      "height": 1312,
+      "format": "PNG RGBA",
+      "sha256": "0adc1c996ccfbf9880077e9f2461f22123bc9dce8cf1ce21c3e587a1b37e85dd"
+    },
+    {
+      "path": "clubs/esports/neon-lynx-esports.png",
+      "width": 1254,
+      "height": 1254,
+      "format": "PNG RGBA",
+      "sha256": "7119ece9c10c5d435132c0f72d484158844b8c3dbee3c850fddb7947a0a8b56e"
+    },
+    {
+      "path": "clubs/esports/ember-phoenix-esports.png",
+      "width": 1254,
+      "height": 1254,
+      "format": "PNG RGBA",
+      "sha256": "d07d1fdb907146d28bd76b9a95675709404f6d6dfaf916172fa04bfa70b284aa"
+    },
+    {
+      "path": "products/arenaone-training-duffel.png",
+      "width": 1254,
+      "height": 1254,
+      "format": "PNG RGBA",
+      "sha256": "e4e6e428dfe4fb26ed27a9a529477c3e033c293f75617d8fd6da4b880ce4b224"
+    },
+    {
+      "path": "products/arenaone-hydration-bottle.png",
+      "width": 1254,
+      "height": 1254,
+      "format": "PNG RGBA",
+      "sha256": "f8b2fa046a01a0ec0349254110b671161c1864a2fbc899ae55255ed5f3cbdc05"
+    },
+    {
+      "path": "brand/arenaone-ao-logo-v3.png",
+      "width": 1254,
+      "height": 1254,
+      "format": "PNG RGBA",
+      "sha256": "38e157f105f29ec006eb94d376c87493692a859eb4b1a408a4e11832d7dbf870"
+    },
+    {
+      "path": "brand/arenaone-ao-terracotta.png",
+      "width": 1254,
+      "height": 1254,
+      "format": "PNG RGBA",
+      "sha256": "cc25259eace2a9acec71808fee745f27a78b5bb06cd259872993dc5db43afa4c"
+    },
+    {
+      "path": "brand/arenaone-ao-app-icon-v4.png",
+      "width": 1254,
+      "height": 1254,
+      "format": "PNG RGBA",
+      "sha256": "0a76e667f634a84d13e6c541d1e4aac5cb86e11e8f331bcb093b824c169bcc75"
+    },
+    {
+      "path": "brand/arenaone-wave-splash.gif",
+      "width": 640,
+      "height": 640,
+      "format": "GIF",
+      "frames": 50,
+      "sha256": "467ecfe264a95bee70395d68018adf8a857c14652af0861f6ea32414c2319201"
+    },
+    {
+      "path": "brand/arenaone-wave-splash-loop.gif",
+      "width": 640,
+      "height": 640,
+      "format": "GIF",
+      "frames": 50,
+      "sha256": "2d744ab341364bae9da38b7ac21cc6e1692ec1bcf26139961ae2b2f6dea14578"
+    },
+    {
+      "path": "products/arenaone-season-pass.png",
+      "width": 1536,
+      "height": 1024,
+      "format": "PNG RGBA",
+      "sha256": "32069a1f705b3957ca1f743b873c12f54420e2cc29f540a9e4306170253ba1f1"
+    },
+    {
+      "path": "products/lions-supporter-scarf.png",
+      "width": 1254,
+      "height": 1254,
+      "format": "PNG RGBA",
+      "sha256": "9946506b334fae2c46aef20355258dc1a26d2b4dd971d1b68318f7d09add2986"
     }
   ]
 }

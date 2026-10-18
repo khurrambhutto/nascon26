@@ -1,0 +1,47 @@
+[
+  {
+    "name": "arenaone-logo-v2",
+    "folder": "brand",
+    "prompt": "Use case: logo-brand. Design one excellent original ArenaOne sports app brand symbol, replacing an overly complex a1 monogram. A minimal bold abstract stadium seen from above: two thick opposing rounded horseshoe arcs form an energetic compact oval arena, a single precise diagonal opening creates a subtle forward arrow in negative space. Elegant custom geometric identity, strong optical balance, intentional spacious negative space, globally credible sports brand quality, instantly recognizable at 24 pixels. TWO FLAT COLORS ONLY: deep forest teal #173F3A for main shape, terracotta #CF563E for one short arc segment. No outline around the symbol. No letters, no numeral, no wordmark, no text. Flat vector-like crisp graphic. Center one isolated symbol with generous transparent margins, square canvas. No app tile, shield, animals, ball, trophy, shading, gradients, 3D, glow, texture, watermark or presentation board. Actually transparent background."
+  },
+  {
+    "name": "karakoram-falcons-cc",
+    "folder": "clubs/cricket",
+    "prompt": "Use case: logo-brand. One original fictional cricket club badge for Karakoram Falcons CC. A confident stylized falcon in side profile, a small cricket ball with unmistakable stitched seam nestled at base, clean angular mountain peak incorporated into shield top. Dark forest teal outlines, mint teal and warm cream plumage with restrained coral accent. Refined simplified flat vector-like sports illustration, bold clear shapes, not over-detailed, readable at 48px, cohesive friendly premium mobile sports app style. Single centered shield badge, generous transparent padding. No words, letters, numbers, existing logos, watermark or mockup. Transparent background."
+  },
+  {
+    "name": "indus-strikers-cc",
+    "folder": "clubs/cricket",
+    "prompt": "Use case: logo-brand. One original fictional cricket club badge for Indus Strikers CC. Two stylized cricket bats crossed behind a dynamic stitched red cricket ball with three bold flowing river lines in lower shield. Deep forest teal outlines, terracotta red ball, warm cream bats, mint teal river, tiny ochre highlights. Refined simplified flat vector-like sports illustration, bold clear shapes, not over-detailed, readable at 48px, cohesive friendly premium mobile sports app style. Single centered pointed shield badge, generous transparent padding. No words, letters, numbers, existing logos, watermark or mockup. Transparent background."
+  },
+  {
+    "name": "lahore-thunder-cc",
+    "folder": "clubs/cricket",
+    "prompt": "Use case: logo-brand. One original fictional Lahore Thunder CC cricket club badge. Centered angular shield containing a bold lightning bolt cutting behind three cricket stumps and two bails, small red stitched cricket ball at base. Rich terracotta, warm ochre, cream and deep forest teal outlines, small mint accents. Premium simplified flat vector-like sports crest with clear geometry and strong silhouette, readable at 48px. No text, letters, numbers, watermark, existing club references, mockup or scene. One badge only, generous transparent margin. Actually transparent background."
+  },
+  {
+    "name": "coastal-sharks-cc",
+    "folder": "clubs/cricket",
+    "prompt": "Use case: logo-brand. One original fictional Coastal Sharks CC cricket club badge. A confident stylized shark head emerging over two simple ocean waves within a pointed shield, a small cream cricket bat and stitched coral cricket ball integrated at lower edge. Deep teal, sea mint, cream and restrained coral accents. Premium simplified flat vector-like sports crest with bold outlines, clear geometry and strong silhouette, readable at 48px. No text, letters, numbers, watermark, existing club references, mockup or scene. One badge only, generous transparent margin. Actually transparent background."
+  },
+  {
+    "name": "neon-lynx-esports",
+    "folder": "clubs/esports",
+    "prompt": "Use case: logo-brand. One original fictional Neon Lynx esports team emblem. Confident front-facing lynx head with distinctive tufted ears and sharp expressive eyes, simplified angular geometric fur, two compact pixel-step accents behind ears, contained in a clean hexagonal badge. Deep forest teal outlines, electric mint and warm cream with coral eyes. Polished high quality competitive gaming identity, bold flat vector-like shapes, restrained detail and strong silhouette, readable at 48px. No headset, gun, words, letters, numbers, watermark, existing logos, scene or mockup. Single centered emblem with clear transparent margin. Actually transparent background."
+  },
+  {
+    "name": "ember-phoenix-esports",
+    "folder": "clubs/esports",
+    "prompt": "Use case: logo-brand. One original fictional Ember Phoenix esports team emblem. A stylized phoenix with wings raised in a compact V shape, bold geometric flame feathers and confident eyes, small diamond negative-space core, clean hexagonal badge behind. Deep forest teal outlines, vivid terracotta and honey orange feathers, cream highlights and subtle mint frame. Polished high quality competitive gaming identity, bold flat vector-like shapes, restrained detail and strong silhouette, readable at 48px. No words, letters, numbers, weapon, watermark, existing logos, scene or mockup. Single centered emblem with clear transparent margin. Actually transparent background."
+  },
+  {
+    "name": "arenaone-training-duffel",
+    "folder": "products",
+    "prompt": "Use case: product-mockup. One premium compact training duffel sports bag for fictional ArenaOne app fan shop. Three-quarter front view of deep forest teal technical woven duffel, mint teal webbing handles and shoulder strap, restrained terracotta zip pulls, warm cream small abstract oval stadium emblem patch without lettering. Entire bag and loosely resting strap fully visible, realistic soft fabric and studio product lighting, polished ecommerce photograph, centered square composition with generous clear margin. No text, letters, numbers, real brands, people, hands, mannequins, surface, floor, external cast shadows, scene or watermark. Clean isolated product cutout on genuinely transparent background."
+  },
+  {
+    "name": "arenaone-hydration-bottle",
+    "folder": "products",
+    "prompt": "Use case: product-mockup. One premium insulated sports water bottle for fictional ArenaOne app fan shop. Upright elegant reusable 750ml matte mint teal metal bottle with deep forest teal screw lid and small terracotta carry loop, small cream abstract oval stadium symbol without letters printed on front. Slight three-quarter angle with full lid and base visible, tasteful realistic soft studio product lighting and crisp edges, premium ecommerce photograph, centered square canvas with generous transparent margin. No text, letters, numbers, real brands, people, hands, surface, floor, scene, external cast shadow or watermark. One isolated bottle only on genuinely transparent background."
+  }
+]
