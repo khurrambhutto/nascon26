@@ -52,7 +52,7 @@ def reset(store, body=None):
             pid = f"player-alpha-{index}" if index <= 2 and i == 0 else f"demo-player-{index}-{i}"
             players.append({"player_id": pid, "name": ["Ali", "Bilal", "Hamza", "Usman", "Daniyal"][i] + f" {index}", "position": "gk" if i == 0 else "df" if i < 3 else "fw", "squad_id": sid, "role": "captain" if i == 0 else "starter"})
     roster.setup(store, {"league": {"league_id": "league-alpha-1", "tenant_id": "tenant-alpha", "sport_id": "football", "transfer_window": {"open": (date.today()-timedelta(days=30)).isoformat(), "close": (date.today()+timedelta(days=30)).isoformat()}, "max_squad_size": 25, "required_positions": {"gk": 1}}, "squads": squads, "players": players, "matches_in_progress": []})
-    roster.setup(store, {"league": {"league_id": "league-beta-1", "tenant_id": "tenant-beta", "sport_id": "football", "transfer_window": {"open": "2026-01-01", "close": "2027-12-31"}, "required_positions": {}}, "squads": [{"squad_id": "demo-beta-squad", "club_id": "club-beta-1", "tenant_id": "tenant-beta", "name": "Beta First"}], "players": [{"player_id": "player-beta-1", "name": "Beta Player", "position": "gk", "squad_id": "demo-beta-squad", "role": "starter"}]})
+    roster.setup(store, {"league": {"league_id": "league-beta-1", "tenant_id": "tenant-beta", "sport_id": "football", "transfer_window": {"open": "2026-01-01", "close": "2027-12-31"}, "required_positions": {}}, "squads": [{"squad_id": "demo-beta-squad", "club_id": "club-beta-1", "tenant_id": "tenant-beta", "name": "Beta First"}], "players": [{"player_id": "player-beta-1", "name": "Beta Player", "position": "gk", "squad_id": "demo-beta-squad", "role": "starter"}, {"player_id": "player-beta-2", "name": "Beta Forward", "position": "fw", "squad_id": "demo-beta-squad", "role": "starter"}]})
     for short, role in auth.ROLES.items():
         email = short + "@nascon.test"
         user = {"user_id": "u-" + short, "email": email, "name": role.replace("_", " ").title(), "role": role, "tenant_id": "tenant-alpha", "league_id": "league-alpha-1" if short == "organizer" else None, "club_id": "club-alpha-1" if short == "manager" else None, "player_id": "player-alpha-1" if short == "player" else None, "password_hash": auth.password_hash("Nascon@26", email)}
@@ -71,7 +71,23 @@ def reset(store, body=None):
     match = store.get("match", "demo-m3")
     match["pinned_product_id"] = "prod-jersey-001"
     store.put("match", "demo-m3", match)
+    day2(store)
     store.put("meta", "seeded", True)
     from .demo_catalog import ensure
     ensure(store)
     return {"status": "reset_complete", "seed": seed, "sports": ["football", "basketball", "cricket", "esports"], "tenants": ["tenant-alpha", "tenant-beta"], "stock": {v["variant_id"]: v["stock"] for v in store.all("variant") if v["variant_id"] in stock or v["variant_id"].startswith("var-jersey-")}}
+
+
+def day2(store):
+    """Phase II baseline: live match-m1, fixed QR short links, a guest token and an empty member cart."""
+    for number, (kind, payload) in enumerate([("match_init", {"sport_id": "football", "home_team_id": "club-alpha-1", "away_team_id": "club-alpha-2", "league_id": "league-alpha-1"}),
+                                             ("match_start", {}), ("score", {"team_id": "club-alpha-1", "event_type": "goal"})], 1):
+        scoring.append_event(store, {"event_id": f"seed-m1-{number}", "match_id": "match-m1", "type": kind, "payload": payload})
+    match = store.get("match", "match-m1")
+    match.update(pinned_product_id="prod-jersey-001", scheduled_at="2026-10-18T09:00:00Z", venue="Campus Ground")
+    store.put("match", "match-m1", match)
+    for entity_id, code in (("match-m1", "m1-live"), ("player-alpha-1", "p-alpha-1"), ("club-alpha-1", "c-alpha-1")):
+        store.put("qr", entity_id, {"entity_id": entity_id, "short_code": code, "scan_count": 0, "devices": {}, "buckets": {}})
+        store.put("qr_code", code, {"entity_id": entity_id})
+    store.put("guest_token", "guest_anon_tok_7721", {"guest_token": "guest_anon_tok_7721", "role": "guest", "merged_into": None})
+    store.put("cart", "player-alpha-1", {"user_id": "player-alpha-1", "items": []})

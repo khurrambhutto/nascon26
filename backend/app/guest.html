@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ArenaOne | {{TITLE}}</title>
+<style>
+  :root { --ink: #1b1b1b; --paper: #fffaf6; --brand: #9c3a2a; --muted: #4a4a4a; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 16px/1.5 system-ui, sans-serif; color: var(--ink); background: var(--paper); }
+  header { background: var(--brand); color: #fff; padding: 12px 16px; }
+  header h1 { margin: 0; font-size: 1.25rem; }
+  main { max-width: 720px; margin: 0 auto; padding: 16px; display: grid; gap: 16px; }
+  .card { background: #fff; border: 1px solid #d9cfc8; border-radius: 12px; padding: 16px; }
+  video { width: 100%; min-height: 200px; background: #111; border-radius: 12px; display: block; }
+  .score { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-weight: 700; }
+  #score { font-size: 2rem; }
+  button, input { font: inherit; min-height: 48px; min-width: 48px; border-radius: 8px; }
+  button { background: var(--brand); color: #fff; border: 0; padding: 0 16px; cursor: pointer; }
+  button:focus-visible, input:focus-visible { outline: 3px solid #1a56db; outline-offset: 2px; }
+  input { border: 1px solid #6b6b6b; padding: 0 12px; width: 100%; }
+  ul { list-style: none; margin: 0; padding: 0; max-height: 220px; overflow-y: auto; }
+  li { padding: 6px 0; border-bottom: 1px solid #eee; }
+  .row { display: flex; gap: 8px; }
+  .muted { color: var(--muted); }
+  .modal { position: fixed; inset: 0; background: rgba(0, 0, 0, .55); display: grid; place-items: center; padding: 16px; }
+  .modal[hidden] { display: none; }
+  .modal .card { width: min(420px, 100%); display: grid; gap: 12px; }
+  .secondary { background: #fff; color: var(--brand); border: 2px solid var(--brand); }
+</style>
+</head>
+<body>
+<header><h1 id="title">ArenaOne Live</h1><span id="status-note"></span></header>
+<main>
+  <section aria-label="Live video">
+    <video data-testid="guest-video-player" id="player" controls playsinline muted aria-label="Live stream video player"></video>
+  </section>
+
+  <section class="card score" aria-label="Live score">
+    <span id="home">Home</span>
+    <span data-testid="live-score-banner" id="score" role="status" aria-live="polite">0 - 0</span>
+    <span id="away">Away</span>
+  </section>
+
+  <section class="card" data-testid="pinned-merch-card" aria-label="Pinned merchandise">
+    <h2 id="merch-name" style="margin-top:0">Alpha Home Jersey</h2>
+    <p class="muted" id="merch-price">PKR 4,500.00 · Size L</p>
+    <div class="row">
+      <button data-testid="add-to-guest-cart-btn" id="add" type="button" aria-label="Add jersey size L to guest cart">Add to cart</button>
+      <p style="margin:0;align-self:center">Cart: <span data-testid="guest-cart-count" id="cart-count" aria-live="polite">0</span></p>
+      <button class="secondary" id="checkout" type="button">Proceed to Checkout</button>
+    </div>
+  </section>
+
+  <section class="card" aria-label="Live chat">
+    <h2 style="margin-top:0">Chat</h2>
+    <ul data-testid="chat-message-list" id="chat" aria-live="polite"></ul>
+    <form class="row" id="chat-form" style="margin-top:8px">
+      <label for="chat-input" class="muted" style="position:absolute;left:-9999px">Chat message</label>
+      <input data-testid="chat-input-field" id="chat-input" autocomplete="off" placeholder="Say something">
+      <button data-testid="chat-send-btn" id="send" type="submit" aria-label="Send chat message">Send</button>
+    </form>
+  </section>
+</main>
+
+<div class="modal" data-testid="progressive-auth-modal" id="auth-modal" role="dialog" aria-modal="true" aria-labelledby="auth-title" hidden>
+  <form class="card" id="auth-form">
+    <h2 id="auth-title" style="margin:0">Sign in to continue</h2>
+    <p class="muted" style="margin:0">Your cart is kept. Sign in to chat or check out.</p>
+    <label>Email <input id="email" type="email" autocomplete="username" value="viewer@nascon.test"></label>
+    <label>Password <input id="password" type="password" autocomplete="current-password"></label>
+    <p id="auth-error" role="alert" style="color:#a1001b;margin:0"></p>
+    <div class="row"><button type="submit">Sign in</button><button class="secondary" type="button" id="auth-close">Not now</button></div>
+  </form>
+</div>
+
+<script>
+const ctx = {{CONTEXT}};
+const $ = (id) => document.getElementById(id);
+const wsBase = (location.protocol === "https:" ? "wss://" : "ws://") + location.host;
+let guestToken = sessionStorage.getItem("guest_token");
+let memberToken = sessionStorage.getItem("member_token");
+let cartCount = Number(sessionStorage.getItem("guest_cart_count") || 0);
+let pendingAction = null;
+$("cart-count").textContent = String(cartCount);
+$("title").textContent = ctx.kind === "costream" ? "Co-stream " + ctx.id : ctx.kind === "match" ? "Match " + ctx.id : ctx.id;
+if (ctx.view === "notice") $("status-note").textContent = "Match " + (ctx.state || "updated");
+if (ctx.view === "preview") $("status-note").textContent = "Starts soon";
+if (ctx.view === "vod") $("status-note").textContent = "Replay";
+$("player").src = location.protocol + "//" + location.hostname + ":8888/" + (ctx.kind === "costream" ? "costream/" : "live/") + ctx.id + "/index.m3u8";
+
+async function ensureGuest() {
+  if (guestToken) return guestToken;
+  const response = await fetch("/api/v1/guest/session", {method: "POST"});
+  guestToken = (await response.json()).guest_token;
+  sessionStorage.setItem("guest_token", guestToken);
+  return guestToken;
+}
+
+function subscribe(path, onData) {
+  const socket = new WebSocket(wsBase + path);
+  socket.onmessage = (event) => onData(JSON.parse(event.data));
+  socket.onclose = () => setTimeout(() => subscribe(path, onData), 1000);
+}
+
+function showScore(data) {
+  $("score").textContent = data.score_text;
+  $("home").textContent = data.home_name;
+  $("away").textContent = data.away_name;
+  const product = data.pinned_product;
+  if (product) $("merch-name").textContent = product.name;
+}
+
+function showChat(data) {
+  const list = $("chat");
+  list.replaceChildren(...data.messages.map((message) => {
+    const item = document.createElement("li");
+    item.textContent = message.sender + ": " + message.text;
+    return item;
+  }));
+  list.scrollTop = list.scrollHeight;
+}
+
+function openAuth(action) {
+  pendingAction = action;
+  $("auth-modal").hidden = false;
+  $("password").focus();
+}
+
+$("add").addEventListener("click", async () => {
+  cartCount += 1;
+  $("cart-count").textContent = String(cartCount);
+  sessionStorage.setItem("guest_cart_count", String(cartCount));
+  const token = await ensureGuest();
+  fetch("/api/v1/guest/cart", {method: "POST", headers: {"Content-Type": "application/json", Authorization: "Bearer " + token},
+    body: JSON.stringify({variant_id: "var-jersey-001-L", quantity: 1})});
+});
+
+async function sendChat() {
+  const text = $("chat-input").value.trim();
+  if (!text) return;
+  const token = memberToken || await ensureGuest();
+  const response = await fetch("/api/v1/chat", {method: "POST", headers: {"Content-Type": "application/json", Authorization: "Bearer " + token},
+    body: JSON.stringify({chat_room_id: ctx.room, text})});
+  if (response.status === 403 || response.status === 401) return openAuth(sendChat);
+  if (response.ok) $("chat-input").value = "";
+}
+
+$("chat-form").addEventListener("submit", (event) => { event.preventDefault(); sendChat(); });
+$("checkout").addEventListener("click", () => memberToken ? alert("Cart saved to your account.") : openAuth(null));
+$("auth-close").addEventListener("click", () => { $("auth-modal").hidden = true; });
+document.addEventListener("keydown", (event) => { if (event.key === "Escape") $("auth-modal").hidden = true; });
+
+$("auth-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const response = await fetch("/api/v1/auth/login", {method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({email: $("email").value, password: $("password").value})});
+  if (!response.ok) { $("auth-error").textContent = "Email or password is incorrect."; return; }
+  const login = await response.json();
+  memberToken = login.token;
+  sessionStorage.setItem("member_token", memberToken);
+  if (cartCount > 0) {
+    await fetch("/audit/v1/guest/cart-merge", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({
+      guest_token: await ensureGuest(), registered_user_id: login.user.player_id || login.user.user_id,
+      guest_cart: [{variant_id: "var-jersey-001-L", quantity: cartCount}]})});
+  }
+  $("auth-modal").hidden = true;
+  if (pendingAction) pendingAction();
+});
+
+if (ctx.kind === "match") subscribe("/ws/matches/" + ctx.id, showScore);
+else $("score").textContent = "LIVE";
+subscribe("/ws/chat/" + ctx.room, showChat);
+ensureGuest();
+</script>
+</body>
+</html>

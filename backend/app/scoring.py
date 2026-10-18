@@ -89,6 +89,18 @@ def register_league(store, body):
     return {"league_id": league_id, "status": "created", "team_count": len(teams), "fixture_count": len(fixtures)}
 
 
+# Day 2: operational states that do not come from the scoring timeline.
+STATUS_EVENTS = {"match_postponed": "postponed", "match_cancelled": "cancelled", "match_abandoned": "abandoned", "status_change": None}
+OPERATIONAL_MOVES = {"upcoming": ("postponed", "cancelled"), "in_progress": ("postponed", "abandoned"), "postponed": ("upcoming", "in_progress", "cancelled")}
+
+
+def effective_status(match, timeline_status):
+    """A finished timeline always wins; otherwise an operational override (postponed etc.) applies."""
+    if timeline_status == "completed":
+        return "completed"
+    return match.get("operational_status") or timeline_status
+
+
 def project(store, match_id):
     match = store.require("match", match_id)
     sport = store.require("sport", match["sport_id"])
@@ -138,7 +150,7 @@ def validate_event(body):
     eid = identifier(body.get("event_id"), "event_id")
     mid = identifier(body.get("match_id"), "match_id")
     kind = body.get("type")
-    check(kind in ("match_init", "match_start", "score", "discipline", "tiebreak_winner", "match_end", "compensation"), "type")
+    check(kind in ("match_init", "match_start", "score", "discipline", "tiebreak_winner", "match_end", "compensation") or kind in STATUS_EVENTS, "type")
     payload = obj(body.get("payload"), "payload")
     if kind == "match_init":
         for key in ("sport_id", "home_team_id", "away_team_id"):
@@ -187,6 +199,11 @@ def append_event(store, body):
         elif kind == "match_start":
             if projection["status"] != "upcoming":
                 fail(409, "ILLEGAL_TRANSITION")
+        elif kind in STATUS_EVENTS:
+            target = payload.get("status") if kind == "status_change" else STATUS_EVENTS[kind]
+            if target not in OPERATIONAL_MOVES.get(effective_status(match, projection["status"]), ()):
+                fail(409, "ILLEGAL_TRANSITION")
+            match["operational_status"] = target
         elif kind == "match_end":
             if projection["status"] != "in_progress":
                 fail(409, "ILLEGAL_TRANSITION")

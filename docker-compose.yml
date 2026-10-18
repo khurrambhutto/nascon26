@@ -32,10 +32,15 @@ services:
   api:
     build: ./backend
     ports: ["8080:8080"]
+    networks:
+      default:
+        aliases: [backend]  # Selenium nodes may reach the API as http://backend:8080
     environment: &backend-env
       DATABASE_URL: postgresql+psycopg://nascon:nascon-local@db:5432/nascon
       REDIS_URL: redis://redis:6379/0
       DAY1_SALT: ${DAY1_SALT}
+      DAY2_SALT: ${DAY2_SALT}
+      MEDIA_API_URL: http://media:9997
       JWT_SECRET: ${JWT_SECRET:-}
       OBJECT_STORE_URL: http://object-store:9000
       OBJECT_STORE_ACCESS_KEY: nascon-storage
@@ -77,6 +82,38 @@ services:
       interval: 5s
       timeout: 3s
       retries: 20
+  media:
+    image: bluenviron/mediamtx:1.9.1
+    ports: ["1935:1935", "8888:8888", "8889:8889", "8189:8189/udp"]
+    environment:
+      MTX_API: "yes"
+      MTX_AUTHMETHOD: http
+      MTX_AUTHHTTPADDRESS: http://api:8080/internal/media/auth
+  selenium-hub:
+    image: selenium/hub:4.24.0
+    container_name: nascon-selenium-hub
+    ports: ["4442:4442", "4443:4443", "4444:4444"]
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:4444/status"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+  node-chrome-1: &browser-node
+    image: selenium/node-chrome:4.24.0
+    shm_size: "1gb"
+    depends_on: [selenium-hub]
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    environment: &node-env
+      SE_EVENT_BUS_HOST: selenium-hub
+      SE_EVENT_BUS_PUBLISH_PORT: "4442"
+      SE_EVENT_BUS_SUBSCRIBE_PORT: "4443"
+      SE_NODE_MAX_SESSIONS: "2"
+      SE_NODE_OVERRIDE_MAX_SESSIONS: "true"
+      SE_START_VNC: "false"
+  node-chrome-2: *browser-node
+  node-firefox:
+    <<: *browser-node
+    image: selenium/node-firefox:4.24.0
 volumes:
   postgres-data:
   object-data:

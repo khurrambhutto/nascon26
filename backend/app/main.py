@@ -43,6 +43,11 @@ from .management import router as management_router
 app.include_router(management_router)
 from .mailbox import router as mailbox_router
 app.include_router(mailbox_router)
+from .day2 import router as day2_router
+app.include_router(day2_router)
+from .web import router as web_router
+app.include_router(web_router)
+from . import live
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 requests_by_ip = defaultdict(deque)
 rate_lock = Lock()
@@ -66,6 +71,12 @@ async def boundaries(request, call_next):
             return JSONResponse(DomainError(413, "PAYLOAD_TOO_LARGE").body, status_code=413)
         chunks.append(chunk)
     request._body = b"".join(chunks)
+    # FR-4.3: guests (guest_* bearer, or no credentials on chat) can never write. Enforced server-side.
+    path, header = request.url.path, request.headers.get("authorization", "")
+    if request.method in ("POST", "PUT", "PATCH", "DELETE") and not path.startswith(("/api/v1/guest/", "/audit/v1/guest/")):
+        if header.startswith("Bearer guest_") or (path == "/api/v1/chat" and not header):
+            token = header[7:] or None
+            return JSONResponse(DomainError(403, "GUEST_WRITE_FORBIDDEN", "Anonymous guest tokens cannot perform write mutations.", guest_token=token).body, status_code=403)
     if request._body and request.method in ("POST", "PUT", "PATCH") and "/rbac/" not in request.url.path:
         def reject_constant(value):
             raise ValueError("Non-finite JSON number")
@@ -132,7 +143,10 @@ def health():
 @app.post("/audit/v1/reset", response_model=dict)
 def reset(body: ResetRequest | None = Body(default=None)):
     with transaction() as db:
-        return seed.reset(db, body.data() if body else None)
+        result = seed.reset(db, body.data() if body else None)
+    for key in list(live.versions):
+        live.bump(key)
+    return result
 
 
 @app.post("/audit/v1/sports", response_model=dict, status_code=201)
@@ -155,7 +169,9 @@ def leagues(body: LeagueRequest):
 @app.post("/audit/v1/events", response_model=dict)
 def events(body: EventRequest):
     with transaction() as db:
-        return action_result(scoring.append_event(db, body.data()))
+        result = scoring.append_event(db, body.data())
+    live.bump("match:" + body.match_id)
+    return action_result(result)
 
 
 @app.get("/audit/v1/score/{match_id}", response_model=dict)
@@ -471,7 +487,9 @@ def match_status(match_id: str, request: Request, body: dict = Body(...)):
         user = auth.authenticate(db, request.headers.get("authorization"))
         match = db.require("match", match_id)
         auth.authorize(db, user, "fixtures", match.get("league_id"))
-        return scheduling.change_status(db, match_id, body)
+        result = scheduling.change_status(db, match_id, body)
+    live.bump("match:" + match_id)
+    return result
 
 
 @app.get("/api/v1/orders", response_model=list[dict])

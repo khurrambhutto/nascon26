@@ -7,6 +7,7 @@ import re
 from datetime import date, datetime, timezone
 
 DAY1_SALT = os.environ.get("DAY1_SALT", "").encode("utf-8")
+DAY2_SALT = os.environ.get("DAY2_SALT", "").encode("utf-8")
 
 
 class DomainError(Exception):
@@ -79,6 +80,11 @@ def canonical(value):
 
 def sign(record_id, payload):
     return hmac.new(DAY1_SALT, (record_id + "|" + canonical(payload)).encode("utf-8"), hashlib.sha256).hexdigest()
+
+
+def sign2(entity_id, payload):
+    """Phase II signature: same recipe as Day 1, keyed with DAY2_SALT."""
+    return hmac.new(DAY2_SALT, (entity_id + "|" + canonical(payload)).encode("utf-8"), hashlib.sha256).hexdigest()
 
 
 TIE_BREAKS = ["h2h_points", "h2h_diff", "overall_diff", "scored", "fair_play", "draw_lots"]

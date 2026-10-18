@@ -66,3 +66,10 @@ def transaction():
     with local_lock, engine.begin() as connection:
         connection.execute(select(mutex.c.id).where(mutex.c.id == 1).with_for_update()).first()
         yield Store(connection)
+
+
+@contextmanager
+def reader():
+    """Read-only access without the global write lock (used by high-traffic GET probes)."""
+    with engine.connect() as connection:
+        yield Store(connection)

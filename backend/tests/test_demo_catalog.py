@@ -8,7 +8,7 @@ def test_highlights_include_one_real_match_per_sport(client, login):
     assert len(matches) == 4
     assert {m["sport_id"] for m in matches} == {"football", "basketball", "cricket", "esports"}
     assert len({m["match_id"] for m in matches}) == 4
-    assert next(m for m in matches if m["sport_id"] == "football")["match_id"] == "demo-m3"
+    assert next(m for m in matches if m["sport_id"] == "football")["match_id"] == "match-m1"
     assert next(m for m in matches if m["sport_id"] == "cricket")["home_name"] == "Karakoram Falcons CC"
     assert next(m for m in matches if m["sport_id"] == "esports")["away_name"] == "Ember Phoenix Esports"
     for match in matches:
