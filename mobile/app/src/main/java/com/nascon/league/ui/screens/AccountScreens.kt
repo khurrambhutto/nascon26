@@ -76,6 +76,8 @@ fun MeScreen(
     onManagement: (() -> Unit)? = null,
     onOrders: () -> Unit = {},
     onGoLive: () -> Unit = {},
+    onScanQr: () -> Unit = {},
+    onPlayers: () -> Unit = {},
 ) {
     var confirmLogout by remember { mutableStateOf(false) }
     val user = session.user
@@ -92,6 +94,8 @@ fun MeScreen(
         }
 
         SectionLabel("Your tools")
+        MenuRow("Players", "Profiles, career records and follows", Icons.Filled.Settings, "menu_players", onPlayers)
+        MenuRow("Scan QR", "Open a match, club, player or co-stream", Icons.Filled.Settings, "menu_scan_qr", onScanQr)
         if (onManagement != null) MenuRow("Management", "Leagues, matches, shop and club operations", Icons.Filled.Settings, "menu_management", onManagement)
         MenuRow("Orders", "View purchases and order status", Icons.AutoMirrored.Filled.KeyboardArrowRight, "menu_orders", onOrders)
         if (user.player_id != null) MenuRow("Go live", "Broadcast from this phone's camera", Icons.AutoMirrored.Filled.KeyboardArrowRight, "menu_golive", onGoLive)

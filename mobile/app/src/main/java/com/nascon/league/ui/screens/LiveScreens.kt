@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.nascon.league.data.ServiceLocator
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.*
 
 /** MediaMTX serves its WebRTC pages on :8889 of the same host the API uses. */
 fun mediaUrl(path: String): String {
@@ -76,10 +77,12 @@ fun LivePlayer(streamKey: String?, label: String, modifier: Modifier = Modifier)
 
 /** In-app solo broadcast (FR-3.2): rotate my key, then publish camera + mic over WebRTC WHIP. */
 @Composable
-fun GoLiveScreen(onBack: () -> Unit) {
+fun GoLiveScreen(sessionHint: String? = null, onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
     var key by remember { mutableStateOf<String?>(null) }
     var message by remember { mutableStateOf("Allow camera and microphone, then tap Go live.") }
+    var room by remember { mutableStateOf("chat-match-m1") }
+    var sessionId by remember { mutableStateOf<String?>(sessionHint) }
     var granted by remember { mutableStateOf(false) }
     val permissions = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
         granted = result.values.all { it }
@@ -106,6 +109,86 @@ fun GoLiveScreen(onBack: () -> Unit) {
                 }
             }, enabled = granted, modifier = Modifier.testTag("golive_start")) { Text("Go live") }
         }
-        OutlinedButton(onClick = onBack) { Text("Back") }
+        Button(onClick = { scope.launch {
+            runCatching { ServiceLocator.repo.liveRequest("/api/v1/costream", "POST").jsonObject }.onSuccess {
+                sessionId = it.getValue("session_id").jsonPrimitive.content; room = "chat-$sessionId"
+            }
+        } }, modifier = Modifier.testTag("create_costream")) { Text("Start co-stream") }
+        sessionId?.let { Text("Session: $it"); CostreamTools(it) }
+        LiveChat(room)
+        OutlinedButton(onClick = onBack, modifier = Modifier.testTag("golive_back")) { Text("Back") }
     }
+}
+
+@Composable
+fun LiveChat(room: String) {
+    var messages by remember(room) { mutableStateOf(listOf<String>()) }
+    var text by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf("") }
+    val scope = rememberCoroutineScope()
+    LaunchedEffect(room) {
+        while (true) {
+            ServiceLocator.repo.chatRoom(room)?.let { response ->
+                messages = response["messages"]?.jsonArray?.map { item ->
+                    val m = item.jsonObject
+                    "${m["sender"]?.jsonPrimitive?.content}: ${m["text"]?.jsonPrimitive?.content}"
+                }.orEmpty()
+            }
+            kotlinx.coroutines.delay(500)
+        }
+    }
+    Text("Shared chat", style = MaterialTheme.typography.titleMedium)
+    messages.takeLast(12).forEach { Text(it, modifier = Modifier.testTag("broadcast_chat_message")) }
+    androidx.compose.material3.OutlinedTextField(value = text, onValueChange = { text = it }, label = { Text("Message") }, modifier = Modifier.fillMaxWidth().testTag("broadcast_chat_input"))
+    Button(onClick = { scope.launch {
+        runCatching { ServiceLocator.repo.liveRequest("/api/v1/chat", "POST", buildJsonObject { put("chat_room_id", room); put("text", text) }.toString()) }
+            .onSuccess { text = ""; error = "" }.onFailure { error = "Message blocked or connection unavailable." }
+    } }, enabled = text.isNotBlank(), modifier = Modifier.testTag("broadcast_chat_send")) { Text("Send") }
+    if (error.isNotBlank()) Text(error, color = MaterialTheme.colorScheme.error)
+}
+
+@Composable
+fun CostreamTools(sessionId: String, inviteToken: String? = null, onBroadcast: (() -> Unit)? = null) {
+    val repo = ServiceLocator.repo
+    val scope = rememberCoroutineScope()
+    var invitee by remember { mutableStateOf("") }
+    var token by remember { mutableStateOf(inviteToken.orEmpty()) }
+    var message by remember { mutableStateOf("") }
+    var state by remember { mutableStateOf<kotlinx.serialization.json.JsonObject?>(null) }
+    var joined by remember { mutableStateOf(false) }
+    androidx.compose.runtime.DisposableEffect(sessionId, joined) {
+        val socket = if (joined) repo.presence(sessionId) else null
+        onDispose { /* Activity owns the socket across broadcast-screen navigation. */ }
+    }
+    LaunchedEffect(sessionId) { while (true) { state = repo.costream(sessionId); kotlinx.coroutines.delay(700) } }
+    val me = repo.session.value?.user?.player_id
+    val host = state?.get("active_host")?.jsonPrimitive?.content
+    LaunchedEffect(host, me) { if (host != null && host == me) joined = true }
+    if (onBroadcast != null && me != null) Button(onClick = onBroadcast, modifier = Modifier.testTag("costream_broadcast")) { Text("Broadcast camera") }
+    suspend fun action(path: String, body: String) {
+        runCatching { repo.liveRequest(path, "POST", body) }.onSuccess { message = "Saved" }.onFailure { message = "Action refused. Check your role or invite token." }
+    }
+    if (me != null) {
+        androidx.compose.material3.OutlinedTextField(value = token, onValueChange = { token = it }, label = { Text("Invitation token") }, modifier = Modifier.testTag("costream_invite_token"))
+        Button(onClick = { scope.launch {
+            if (host == me) joined = true else {
+                val success = runCatching { repo.liveRequest("/api/v1/costream/$sessionId/join", "POST", buildJsonObject { put("player_id", me); put("invite_token", token) }.toString()) }.isSuccess
+                joined = success; message = if (success) "Joined" else "Invalid invitation or session full"
+            }
+        } }, modifier = Modifier.testTag("costream_join")) { Text(if (host == me) "Host this session" else "Join broadcast") }
+    }
+    if (host == me) {
+        androidx.compose.material3.OutlinedTextField(value = invitee, onValueChange = { invitee = it }, label = { Text("Player ID to invite") }, modifier = Modifier.testTag("costream_invitee"))
+        Button(onClick = { scope.launch { action("/api/v1/costream/$sessionId/invites", buildJsonObject { put("player_id", invitee) }.toString()) } }, modifier = Modifier.testTag("costream_invite")) { Text("Send invitation") }
+        state?.get("participants")?.jsonArray?.forEach { entry ->
+            val player = entry.jsonPrimitive.content
+            Text(player)
+            androidx.compose.foundation.layout.Row {
+                listOf("mute", "unmute", "spotlight", "kick").forEach { command ->
+                    androidx.compose.material3.TextButton(onClick = { scope.launch { action("/api/v1/costream/$sessionId/control", buildJsonObject { put("action", command); put("player_id", player) }.toString()) } }, modifier = Modifier.testTag("costream_${command}_$player")) { Text(command) }
+                }
+            }
+        }
+    }
+    if (message.isNotBlank()) Text(message)
 }

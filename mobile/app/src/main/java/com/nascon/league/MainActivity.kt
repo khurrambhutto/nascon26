@@ -40,6 +40,11 @@ class MainActivity : ComponentActivity() {
     private val notificationMatch = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
     private val deepLink = kotlinx.coroutines.flow.MutableStateFlow<DeepLink?>(null)
 
+    override fun onStop() {
+        super.onStop()
+        ServiceLocator.repo.closeBroadcastPresence()
+    }
+
     override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
@@ -54,6 +59,13 @@ class MainActivity : ComponentActivity() {
             navigationBarStyle = SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT),
         )
         super.onCreate(savedInstanceState)
+        if (android.os.Build.VERSION.SDK_INT >= 33 && checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            val preferences = getPreferences(MODE_PRIVATE)
+            if (!preferences.getBoolean("notification_permission_asked", false)) {
+                preferences.edit().putBoolean("notification_permission_asked", true).apply()
+                requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 400)
+            }
+        }
         notificationMatch.value = intent.getStringExtra("reminder_match_id")
         deepLink.value = DeepLink.parse(intent.data)
         setContent {
@@ -68,7 +80,7 @@ class MainActivity : ComponentActivity() {
                     val openLink = link
                     if (openLink != null) DeepLinkScreen(openLink) { deepLink.value = null; showingSplash = false }
                     else if (showingSplash) SplashScreen { showingSplash = false }
-                    else if (current == null) LoginScreen(app) else androidx.compose.runtime.key(current.user.user_id) {
+                    else if (current == null) LoginScreen(app, onGuest = { deepLink.value = DeepLink("match-m1") }) else androidx.compose.runtime.key(current.user.user_id) {
                         MainShell(app, current, requestedMatch) { notificationMatch.value = null }
                     }
                 }

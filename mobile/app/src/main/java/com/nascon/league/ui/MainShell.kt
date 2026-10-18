@@ -165,8 +165,13 @@ fun MainShell(app: AppViewModel, session: Session, requestedMatch: String? = nul
                     onManagement = if (manager) ({ nav.goToTab("manage") }) else null,
                     onOrders = { nav.navigate("orders") },
                     onGoLive = { nav.navigate("golive") },
+                    onScanQr = { nav.navigate("scanqr") },
+                    onPlayers = { nav.navigate("players") },
                 )
             }
+            composable("players") { com.nascon.league.ui.screens.PlayerDirectoryScreen(onPlayer = { nav.navigate("player/$it") }, onBack = back) }
+            composable("player/{id}") { entry -> com.nascon.league.ui.screens.PlayerProfileScreen(entry.arguments?.getString("id").orEmpty(), onBack = back) }
+            composable("scanqr") { com.nascon.league.ui.screens.QrScannerScreen(onBack = back) }
             composable("golive") { com.nascon.league.ui.screens.GoLiveScreen(onBack = back) }
             composable("sync") { SyncScreen(app, onBack = back) }
             composable("settings") { SettingsScreen(onBack = back) }

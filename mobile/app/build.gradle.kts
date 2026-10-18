@@ -49,6 +49,7 @@ android {
 
 dependencies {
     testImplementation("junit:junit:4.13.2")
+    implementation(files("libs/zxing-core-3.5.3.jar"))
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
     implementation(libs.compose.ui.tooling.preview)

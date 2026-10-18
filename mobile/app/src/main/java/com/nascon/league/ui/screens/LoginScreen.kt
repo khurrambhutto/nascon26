@@ -59,7 +59,7 @@ private val demoAccounts = listOf(
 )
 
 @Composable
-fun LoginScreen(app: AppViewModel) {
+fun LoginScreen(app: AppViewModel, onGuest: () -> Unit = {}) {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var showPassword by remember { mutableStateOf(false) }
@@ -137,6 +137,10 @@ fun LoginScreen(app: AppViewModel) {
                 busy = busy,
                 modifier = Modifier.fillMaxWidth().testTag("login_button"),
             )
+            Spacer(Modifier.height(8.dp))
+            androidx.compose.material3.OutlinedButton(onClick = onGuest, modifier = Modifier.fillMaxWidth().testTag("guest_button")) {
+                Text("Continue as guest (watch live, no account)")
+            }
 
             Spacer(Modifier.height(28.dp))
             Text("Try a demo account", style = MaterialTheme.typography.titleSmall)

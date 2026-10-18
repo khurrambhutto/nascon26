@@ -27,7 +27,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
 /** Target of a nascon://entity/{id} or nascon://stream/{session} link. */
-data class DeepLink(val id: String) {
+data class DeepLink(val id: String, val inviteToken: String? = null) {
     val isCostream get() = id.startsWith("cs-session-")
     val isMatch get() = id.startsWith("match-")
 
@@ -35,7 +35,7 @@ data class DeepLink(val id: String) {
         fun parse(uri: android.net.Uri?): DeepLink? {
             if (uri?.scheme != "nascon") return null
             val id = uri.pathSegments.firstOrNull() ?: return null
-            return if (uri.host == "entity" || uri.host == "stream") DeepLink(id) else null
+            return if (uri.host == "entity" || uri.host == "stream") DeepLink(id, uri.getQueryParameter("invite_token")) else null
         }
     }
 }
@@ -43,6 +43,9 @@ data class DeepLink(val id: String) {
 /** Opens straight from a QR / adb deep link: no splash, no login wall (guest read-only data). */
 @Composable
 fun DeepLinkScreen(link: DeepLink, onClose: () -> Unit) {
+    if (link.id.startsWith("player-") || link.id.startsWith("demo-player-")) { PlayerProfileScreen(link.id, onClose); return }
+    var publishing by remember { mutableStateOf(false) }
+    if (publishing) { GoLiveScreen(sessionHint = link.id) { publishing = false }; return }
     var score by remember { mutableStateOf("…") }
     var teams by remember { mutableStateOf("") }
     var status by remember { mutableStateOf("Loading") }
@@ -83,7 +86,10 @@ fun DeepLinkScreen(link: DeepLink, onClose: () -> Unit) {
         Text(link.id, modifier = Modifier.testTag("deeplink_entity_id"))
         // Split view: one WebRTC tile per live broadcaster (solo match stream or up to 4 co-streamers).
         if (streams.isEmpty()) LivePlayer(null, "Not live yet")
-        streams.take(4).forEach { (player, key) -> LivePlayer(key, player) }
+        if (link.isCostream) {
+            MediaWebView(mediaUrl("costream/${link.id}/?autoplay=true&muted=true"), Modifier.fillMaxSize().testTag("costream_composite"))
+            CostreamTools(link.id, link.inviteToken) { publishing = true }
+        } else streams.take(4).forEach { (player, key) -> LivePlayer(key, player) }
         Card(Modifier.testTag("deeplink_live_card")) {
             Column(Modifier.padding(16.dp)) {
                 if (link.isMatch) {
@@ -93,6 +99,7 @@ fun DeepLinkScreen(link: DeepLink, onClose: () -> Unit) {
                 Text(status, modifier = Modifier.testTag("deeplink_status"))
             }
         }
+        LiveChat("chat-${link.id}")
         Text("Chat", style = MaterialTheme.typography.titleMedium)
         Column(Modifier.testTag("deeplink_chat")) { chat.takeLast(8).forEach { Text(it) } }
         Button(onClick = onClose, modifier = Modifier.testTag("deeplink_close")) { Text("Open full app") }

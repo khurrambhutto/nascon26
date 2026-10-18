@@ -31,6 +31,8 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 import okhttp3.Request
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import java.io.IOException
 import java.time.Instant
@@ -89,6 +91,7 @@ class Repository(context: Context) {
     val wirelessUrl: String get() = secure.wirelessUrl
 
     init {
+        startLiveNotifications()
         reminders.restore(if (session.value == null) "" else owner())
         if (session.value != null) {
             db.adoptLegacy(owner())
@@ -234,6 +237,59 @@ class Repository(context: Context) {
     suspend fun publicMatch(id: String) = runCatching { AppJson.parseToJsonElement(api.publicMatch(id).string()).jsonObject }.getOrNull()
     suspend fun chatRoom(room: String) = runCatching { AppJson.parseToJsonElement(api.chatRoom(room).string()).jsonObject }.getOrNull()
     suspend fun costream(id: String) = runCatching { AppJson.parseToJsonElement(api.costream(id).string()).jsonObject }.getOrNull()
+
+    suspend fun liveRequest(path: String, method: String = "GET", body: String = "{}"): kotlinx.serialization.json.JsonElement = withContext(Dispatchers.IO) {
+        val builder = okhttp3.Request.Builder().url(serverUrl.trimEnd('/') + path)
+        if (method != "GET") builder.method(method, body.toRequestBody("application/json".toMediaType()))
+        client.newCall(builder.build()).execute().use { response ->
+            val text = response.body?.string().orEmpty()
+            if (!response.isSuccessful) throw IOException(text)
+            AppJson.parseToJsonElement(text)
+        }
+    }
+
+    private val broadcastSockets = mutableMapOf<String, okhttp3.WebSocket>()
+    fun presence(id: String): okhttp3.WebSocket = synchronized(broadcastSockets) {
+        broadcastSockets.getOrPut(id) {
+            client.newWebSocket(okhttp3.Request.Builder()
+                .url(serverUrl.replace("http://", "ws://").replace("https://", "wss://").trimEnd('/') + "/ws/costream/$id/presence").build(), object : okhttp3.WebSocketListener() {})
+        }
+    }
+    fun closeBroadcastPresence() = synchronized(broadcastSockets) {
+        broadcastSockets.values.forEach { it.close(1000, "Broadcaster left the app") }
+        broadcastSockets.clear()
+    }
+
+    private fun startLiveNotifications() {
+        scope.launch {
+            var serviceStarted = false
+            while (true) {
+                val jwt = secure.token
+                if (jwt == null) {
+                    if (serviceStarted) appContext.stopService(android.content.Intent(appContext, com.nascon.league.notifications.LiveUpdatesService::class.java))
+                    serviceStarted = false
+                    kotlinx.coroutines.delay(1000); continue
+                }
+                if (!serviceStarted) serviceStarted = runCatching {
+                    appContext.startForegroundService(android.content.Intent(appContext, com.nascon.league.notifications.LiveUpdatesService::class.java)); true
+                }.getOrDefault(false)
+                val closed = kotlinx.coroutines.CompletableDeferred<Unit>()
+                val socket = client.newWebSocket(okhttp3.Request.Builder().url(serverUrl.replace("http://", "ws://").replace("https://", "wss://").trimEnd('/') + "/ws/notifications").build(), object : okhttp3.WebSocketListener() {
+                    override fun onMessage(webSocket: okhttp3.WebSocket, text: String) {
+                        runCatching {
+                            val event = AppJson.parseToJsonElement(text).jsonObject
+                            if (com.nascon.league.notifications.showLiveNotification(appContext, event)) webSocket.send("{\"event_id\":\"" + event.getValue("event_id").jsonPrimitive.content + "\"}")
+                        }
+                    }
+                    override fun onFailure(webSocket: okhttp3.WebSocket, t: Throwable, response: okhttp3.Response?) { closed.complete(Unit) }
+                    override fun onClosed(webSocket: okhttp3.WebSocket, code: Int, reason: String) { closed.complete(Unit) }
+                })
+                while (!closed.isCompleted && secure.token == jwt) kotlinx.coroutines.delay(500)
+                socket.close(1000, "Session changed")
+                kotlinx.coroutines.delay(1000)
+            }
+        }
+    }
 
     /** Go Live: rotate (or revoke) the signed-in player's stream key; returns the active key. */
     suspend fun myStreamKey(action: String) = runCatching {
