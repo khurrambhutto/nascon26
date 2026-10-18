@@ -1,5 +1,7 @@
 package com.nascon.league.ui.screens
 
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.TextButton
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
@@ -29,14 +31,15 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.CancellationException
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -70,6 +73,8 @@ fun MeScreen(
     onOpenSettings: () -> Unit,
     onOpenRoster: () -> Unit,
     onLogout: () -> Unit,
+    onManagement: (() -> Unit)? = null,
+    onOrders: () -> Unit = {},
 ) {
     var confirmLogout by remember { mutableStateOf(false) }
     val user = session.user
@@ -86,6 +91,8 @@ fun MeScreen(
         }
 
         SectionLabel("Your tools")
+        if (onManagement != null) MenuRow("Management", "Leagues, matches, shop and club operations", Icons.Filled.Settings, "menu_management", onManagement)
+        MenuRow("Orders", "View purchases and order status", Icons.AutoMirrored.Filled.KeyboardArrowRight, "menu_orders", onOrders)
         when (user.role) {
             "club_manager", "super_admin" -> MenuRow("Manage squad", "Transfer, loan or release players", Icons.AutoMirrored.Filled.KeyboardArrowRight, "menu_roster", onOpenRoster)
             "league_organizer" -> InfoText("Open a match from Matches to start it, record scores, or undo a wrong event.")
@@ -154,6 +161,10 @@ fun SyncScreen(app: AppViewModel, onBack: () -> Unit) {
     val pending by app.pending.collectAsStateWithLifecycle()
     val results by app.lastSync.collectAsStateWithLifecycle()
     val connection by app.connection.collectAsStateWithLifecycle()
+    val syncError by app.repo.syncError.collectAsStateWithLifecycle()
+    val backgroundError by app.repo.backgroundSyncError.collectAsStateWithLifecycle()
+    val queuedCount by app.queuedCount.collectAsStateWithLifecycle()
+    val preparing by app.repo.preparingOffline.collectAsStateWithLifecycle()
 
     Column(Modifier.fillMaxSize()) {
         ScreenHeader(title = "Sync", subtitle = when (connection) {
@@ -162,6 +173,10 @@ fun SyncScreen(app: AppViewModel, onBack: () -> Unit) {
             Connection.ServerDown -> "Connected, but the server isn't answering."
             Connection.Offline -> "Offline. Actions are saved on this phone."
         }, onBack = onBack)
+        if (preparing) Text("Preparing saved screens for offline use. Keep the connection on until this finishes.", Modifier.padding(20.dp).testTag("offline_cache_preparing"))
+        syncError?.let { Text(it, Modifier.padding(horizontal = 20.dp).testTag("sync_error")) }
+        backgroundError?.let { Text(it, Modifier.padding(horizontal = 20.dp).testTag("background_sync_error")) }
+        if (queuedCount > pending.size) InfoText("${queuedCount - pending.size} saved action(s) from another account will sync automatically. That account's details stay private.")
 
         LazyColumn(Modifier.weight(1f).testTag("sync_list")) {
             item { SectionLabel("Waiting to sync (${pending.size})") }
@@ -205,7 +220,7 @@ fun SyncScreen(app: AppViewModel, onBack: () -> Unit) {
         PrimaryButton(
             text = if (connection == Connection.Syncing) "Syncing" else "Sync now",
             busy = connection == Connection.Syncing,
-            enabled = pending.isNotEmpty(),
+            enabled = queuedCount > 0,
             onClick = app::syncNow,
             modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp).testTag("sync_now"),
         )
@@ -219,7 +234,10 @@ fun SettingsScreen(onBack: () -> Unit, standalone: Boolean = false) {
     val repo = ServiceLocator.repo
     var url by remember { mutableStateOf(repo.serverUrl) }
     var saved by remember { mutableStateOf(false) }
-    val valid = url.trim().let { (it.startsWith("http://") || it.startsWith("https://")) && it.length > 10 }
+    var checking by remember { mutableStateOf(false) }
+    var connectionMessage by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+    val valid = runCatching { java.net.URI(url.trim()).let { it.scheme in setOf("http", "https") && !it.host.isNullOrBlank() } }.getOrDefault(false)
 
     Column(Modifier.fillMaxSize().then(if (standalone) Modifier.statusBarsPadding() else Modifier).verticalScroll(rememberScrollState())) {
         ScreenHeader(title = "Server address", onBack = onBack)
@@ -228,6 +246,9 @@ fun SettingsScreen(onBack: () -> Unit, standalone: Boolean = false) {
                 "Where the app finds the league server. Use your laptop's address on the same Wi-Fi or hotspot.",
                 color = Pitch.Muted,
             )
+            Spacer(Modifier.height(8.dp))
+            Text("For use without USB, enter the laptop's Wi-Fi IPv4 address and port 8080. Both devices must share a Wi-Fi network or phone hotspot. 127.0.0.1 only works while the USB tunnel is connected.")
+            if (repo.wirelessUrl.isNotBlank()) Text("Saved wireless backup: ${repo.wirelessUrl}. The app tries it automatically if the USB connection fails.")
             Spacer(Modifier.height(16.dp))
             OutlinedTextField(
                 value = url,
@@ -241,9 +262,10 @@ fun SettingsScreen(onBack: () -> Unit, standalone: Boolean = false) {
             Spacer(Modifier.height(8.dp))
             Text("Quick picks", style = MaterialTheme.typography.titleSmall)
             listOf(
+                repo.wirelessUrl to "Saved wireless connection",
                 "http://127.0.0.1:8080/" to "USB cable (after adb reverse)",
                 "http://10.0.2.2:8080/" to "Android emulator",
-            ).forEach { (address, label) ->
+            ).filter { it.first.isNotBlank() }.forEach { (address, label) ->
                 Row(
                     Modifier.fillMaxWidth().clickable { url = address; saved = false }.heightIn(min = 48.dp).padding(vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -256,10 +278,20 @@ fun SettingsScreen(onBack: () -> Unit, standalone: Boolean = false) {
             }
             Spacer(Modifier.height(16.dp))
             if (saved) Banner("Saved. The app now uses this address.", BannerKind.Success, inset = false) { saved = false }
+            connectionMessage?.let { Text(it, modifier = Modifier.testTag("connection_test_result")) }
             PrimaryButton(
-                text = "Save address",
-                enabled = valid,
-                onClick = { repo.setServerUrl(url); saved = true },
+                text = if (checking) "Checking connection" else "Save and test connection",
+                enabled = valid && !checking,
+                onClick = {
+                    repo.setServerUrl(url); saved = true; checking = true
+                    scope.launch {
+                        try {
+                            repo.probe()
+                            connectionMessage = if (repo.serverReachable.value) "Connected to ${repo.serverUrl}" else "Server unreachable. Keep the laptop and phone on the same network, start the backend, and allow TCP port 8080 in the laptop firewall. Your cached data and queued actions remain available."
+                        } catch (e: CancellationException) { throw e }
+                        finally { checking = false }
+                    }
+                },
                 modifier = Modifier.fillMaxWidth().testTag("save_server_url"),
             )
             Spacer(Modifier.height(24.dp))

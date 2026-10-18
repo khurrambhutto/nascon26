@@ -13,7 +13,7 @@ data class PendingAction(val action: OfflineAction, val label: String)
  *  - cache: last good JSON response for each screen, keyed by request path.
  *  - pending_actions: offline scoring/roster actions waiting to sync (spec 5.14 format).
  */
-class LocalDb(context: Context) : SQLiteOpenHelper(context, "league.db", null, 1) {
+class LocalDb(context: Context) : SQLiteOpenHelper(context, "league.db", null, 2) {
 
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL("CREATE TABLE cache (key TEXT PRIMARY KEY, json TEXT NOT NULL, saved_at INTEGER NOT NULL)")
@@ -25,11 +25,20 @@ class LocalDb(context: Context) : SQLiteOpenHelper(context, "league.db", null, 1
                 base_version INTEGER NOT NULL,
                 payload TEXT NOT NULL,
                 label TEXT NOT NULL,
-                created INTEGER NOT NULL)"""
+                created INTEGER NOT NULL,
+                owner TEXT NOT NULL DEFAULT '')"""
         )
     }
 
-    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {}
+    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+        if (oldVersion < 2) db.execSQL("ALTER TABLE pending_actions ADD COLUMN owner TEXT NOT NULL DEFAULT ''")
+    }
+
+    /** Older installs had one queue. Assign it to the signed-in account once. */
+    fun adoptLegacy(owner: String) {
+        writableDatabase.execSQL("UPDATE pending_actions SET owner = ? WHERE owner = ''", arrayOf(owner))
+        writableDatabase.execSQL("UPDATE cache SET key = ? || '/' || key WHERE instr(key, '|') = 0", arrayOf(owner))
+    }
 
     fun putCache(key: String, json: String) {
         val values = ContentValues().apply {
@@ -46,7 +55,7 @@ class LocalDb(context: Context) : SQLiteOpenHelper(context, "league.db", null, 1
             if (c.moveToFirst()) c.getString(0) to c.getLong(1) else null
         }
 
-    fun addAction(item: PendingAction) {
+    fun addAction(item: PendingAction, owner: String) {
         val values = ContentValues().apply {
             put("action_id", item.action.action_id)
             put("type", item.action.type)
@@ -55,14 +64,15 @@ class LocalDb(context: Context) : SQLiteOpenHelper(context, "league.db", null, 1
             put("payload", AppJson.encodeToString(kotlinx.serialization.json.JsonElement.serializer(), item.action.payload))
             put("label", item.label)
             put("created", System.currentTimeMillis())
+            put("owner", owner)
         }
         writableDatabase.insertWithOnConflict("pending_actions", null, values, SQLiteDatabase.CONFLICT_REPLACE)
     }
 
-    fun pendingActions(): List<PendingAction> =
+    fun pendingActions(owner: String): List<PendingAction> =
         readableDatabase.rawQuery(
-            "SELECT action_id, type, queued_at, base_version, payload, label FROM pending_actions ORDER BY created",
-            null,
+            "SELECT action_id, type, queued_at, base_version, payload, label FROM pending_actions WHERE owner = ? ORDER BY created, rowid",
+            arrayOf(owner),
         ).use { c ->
             buildList {
                 while (c.moveToNext()) {
@@ -80,5 +90,13 @@ class LocalDb(context: Context) : SQLiteOpenHelper(context, "league.db", null, 1
 
     fun removeActions(ids: Collection<String>) {
         ids.forEach { writableDatabase.delete("pending_actions", "action_id = ?", arrayOf(it)) }
+    }
+
+    fun pendingOwners(): List<String> = readableDatabase.rawQuery(
+        "SELECT DISTINCT owner FROM pending_actions WHERE owner != '' ORDER BY owner", null,
+    ).use { cursor -> buildList { while (cursor.moveToNext()) add(cursor.getString(0)) } }
+
+    fun pendingCount(): Int = readableDatabase.rawQuery("SELECT COUNT(*) FROM pending_actions", null).use {
+        it.moveToFirst(); it.getInt(0)
     }
 }

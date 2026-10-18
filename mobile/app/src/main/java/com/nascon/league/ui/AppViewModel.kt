@@ -18,6 +18,7 @@ class AppViewModel : ViewModel() {
     val repo = ServiceLocator.repo
     val session: StateFlow<Session?> = repo.session
     val pending = repo.pending
+    val queuedCount = repo.queuedCount
     val lastSync = repo.lastSync
 
     val connection: StateFlow<Connection> =
@@ -34,9 +35,9 @@ class AppViewModel : ViewModel() {
     init {
         // Sync as soon as the server is reachable again and something is waiting.
         viewModelScope.launch {
-            combine(repo.serverReachable, repo.pending) { reachable, queue -> reachable && queue.isNotEmpty() }
+            combine(repo.serverReachable, repo.queuedAccounts) { reachable, accounts -> reachable && accounts.isNotEmpty() }
                 .distinctUntilChanged()
-                .collect { shouldSync -> if (shouldSync) repo.syncNow() }
+                .collect { shouldSync -> if (shouldSync) repo.syncAllPending() }
         }
         // When the phone's network comes back, check the server straight away.
         viewModelScope.launch {
@@ -46,14 +47,14 @@ class AppViewModel : ViewModel() {
         viewModelScope.launch {
             while (true) {
                 delay(10_000)
-                if (!repo.serverReachable.value) repo.probe()
-                if (repo.serverReachable.value && repo.pending.value.isNotEmpty()) repo.syncNow()
+                repo.probe()
+                if (repo.serverReachable.value && repo.queuedAccounts.value.isNotEmpty()) repo.syncAllPending()
             }
         }
     }
 
     fun syncNow() {
-        viewModelScope.launch { repo.syncNow() }
+        viewModelScope.launch { repo.syncAllPending() }
     }
 
     fun logout() = repo.logout()

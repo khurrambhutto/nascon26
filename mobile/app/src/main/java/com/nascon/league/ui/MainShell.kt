@@ -67,6 +67,7 @@ import com.nascon.league.ui.screens.StandingsScreen
 import com.nascon.league.ui.screens.StoreScreen
 import com.nascon.league.ui.screens.StoreViewModel
 import com.nascon.league.ui.screens.SyncScreen
+import com.nascon.league.ui.screens.ManagementScreen
 import com.nascon.league.ui.theme.Pitch
 
 /** The league every screen starts on. Organizers start on their own league. */
@@ -91,21 +92,25 @@ fun Session.canManageRoster(clubId: String?): Boolean =
     user.role == "super_admin" || (user.role == "club_manager" && user.club_id == clubId)
 
 @Composable
-fun MainShell(app: AppViewModel, session: Session) {
+fun MainShell(app: AppViewModel, session: Session, requestedMatch: String? = null, onMatchOpened: () -> Unit = {}) {
+    val manager = session.user.role in setOf("super_admin", "league_organizer", "club_manager")
+    val roleTabs = if (manager) tabs.map { tab ->
+        if (tab.route == "store") Tab("manage", "Manage", Icons.AutoMirrored.Filled.List) else tab
+    } else tabs
     val nav = rememberNavController()
-    val store: StoreViewModel = viewModel()
+    val store: StoreViewModel = viewModel(key = "store-${session.user.user_id}")
     val connection by app.connection.collectAsStateWithLifecycle()
-    val pending by app.pending.collectAsStateWithLifecycle()
+    val queuedCount by app.queuedCount.collectAsStateWithLifecycle()
     val backStack by nav.currentBackStackEntryAsState()
     val currentRoute = backStack?.destination?.route
 
     Scaffold(
-        topBar = { ConnectionStrip(connection, pending.size) { nav.navigate("sync") } },
+        topBar = { ConnectionStrip(connection, queuedCount) { nav.navigate("sync") } },
         containerColor = Pitch.Chalk,
-        bottomBar = { FloatingTabBar(currentRoute) { nav.goToTab(it) } },
+        bottomBar = { FloatingTabBar(currentRoute, roleTabs) { nav.goToTab(it) } },
     ) { inner ->
         // Role-aware home: club managers land on their club, everyone else on matches.
-        val home = if (session.user.role == "club_manager") "club" else "fixtures"
+        val home = if (manager) "manage" else "fixtures"
         androidx.compose.runtime.CompositionLocalProvider(com.nascon.league.ui.components.LocalTenant provides session.tenant) {
         NavHost(
             navController = nav,
@@ -118,7 +123,11 @@ fun MainShell(app: AppViewModel, session: Session) {
             popExitTransition = { fadeOut(tween(160)) + slideOutHorizontally(tween(220)) { it / 10 } },
         ) {
             val back: () -> Unit = { nav.popBackStack() }
-            composable("fixtures") { FixturesScreen(session) { id -> nav.navigate("match/$id") } }
+            composable("fixtures") { FixturesScreen(session, onManage = { nav.goToTab("manage") }, onOpenMatch = { id -> nav.navigate("match/$id") }) }
+            composable("manage") {
+                ManagementScreen(session, onRoster = { nav.navigate("roster/$it") })
+            }
+            composable("orders") { ManagementScreen(session, initialPage = "orders", onBack = back, onRoster = { nav.navigate("roster/$it") }) }
             composable("match/{id}") { entry ->
                 MatchScreen(
                     matchId = entry.arguments?.getString("id").orEmpty(),
@@ -148,15 +157,23 @@ fun MainShell(app: AppViewModel, session: Session) {
             composable("me") {
                 MeScreen(
                     session = session,
-                    pendingCount = pending.size,
+                    pendingCount = queuedCount,
                     onOpenSync = { nav.navigate("sync") },
                     onOpenSettings = { nav.navigate("settings") },
                     onOpenRoster = { nav.navigate("roster/${session.user.club_id ?: DEFAULT_CLUB}") },
                     onLogout = app::logout,
+                    onManagement = if (manager) ({ nav.goToTab("manage") }) else null,
+                    onOrders = { nav.navigate("orders") },
                 )
             }
             composable("sync") { SyncScreen(app, onBack = back) }
             composable("settings") { SettingsScreen(onBack = back) }
+        }
+        androidx.compose.runtime.LaunchedEffect(requestedMatch) {
+            if (requestedMatch != null) {
+                nav.navigate("match/${android.net.Uri.encode(requestedMatch)}") { launchSingleTop = true }
+                onMatchOpened()
+            }
         }
         }
     }
@@ -174,7 +191,7 @@ private fun NavHostController.goToTab(route: String) {
 
 /** Floating rounded tab bar from the mockup; the selected tab fills with the tenant colour. */
 @Composable
-private fun FloatingTabBar(currentRoute: String?, onSelect: (String) -> Unit) {
+private fun FloatingTabBar(currentRoute: String?, roleTabs: List<Tab>, onSelect: (String) -> Unit) {
     Row(
         Modifier
             .navigationBarsPadding()
@@ -185,7 +202,7 @@ private fun FloatingTabBar(currentRoute: String?, onSelect: (String) -> Unit) {
             .background(Pitch.Card)
             .padding(6.dp),
     ) {
-        tabs.forEach { tab ->
+        roleTabs.forEach { tab ->
             val selected = currentRoute?.substringBefore('/') == tab.route ||
                 (tab.route == "fixtures" && currentRoute?.startsWith("match") == true) ||
                 (tab.route == "store" && (currentRoute == "product/{id}" || currentRoute == "cart" || currentRoute == "receipt")) ||

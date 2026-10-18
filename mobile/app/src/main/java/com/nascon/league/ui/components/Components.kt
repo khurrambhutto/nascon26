@@ -1,5 +1,7 @@
 package com.nascon.league.ui.components
 
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.IconButton
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.RepeatMode
@@ -50,9 +52,7 @@ import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -318,6 +318,17 @@ fun ScoreTile(value: String, size: Dp = 40.dp, modifier: Modifier = Modifier, on
 @Composable
 fun TeamBadge(name: String, id: String, size: Dp = 36.dp) {
     val crest = when {
+        // Stable club IDs take precedence over older or renamed display names.
+        id == "club-alpha-1" || id == "club-beta-1" -> R.drawable.crest_lions
+        id == "club-alpha-2" -> R.drawable.crest_wolves
+        id == "demo-club-3" -> R.drawable.crest_bears
+        id == "demo-club-4" -> R.drawable.crest_eagles
+        name.contains("falcons", ignoreCase = true) || id == "club-karakoram-falcons" -> R.drawable.crest_falcons
+        name.contains("strikers", ignoreCase = true) || id == "club-indus-strikers" -> R.drawable.crest_strikers
+        name.contains("thunder", ignoreCase = true) || id == "club-lahore-thunder" -> R.drawable.crest_thunder
+        name.contains("sharks", ignoreCase = true) || id == "club-coastal-sharks" -> R.drawable.crest_sharks
+        name.contains("lynx", ignoreCase = true) || id == "club-neon-lynx" -> R.drawable.crest_lynx
+        name.contains("phoenix", ignoreCase = true) || id == "club-ember-phoenix" -> R.drawable.crest_phoenix
         name.contains("lions", ignoreCase = true) -> R.drawable.crest_lions
         name.contains("eagles", ignoreCase = true) -> R.drawable.crest_eagles
         name.contains("wolves", ignoreCase = true) -> R.drawable.crest_wolves

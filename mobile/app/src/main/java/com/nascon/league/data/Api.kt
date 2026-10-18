@@ -9,12 +9,42 @@ import retrofit2.converter.kotlinx.serialization.asConverterFactory
 import retrofit2.http.Body
 import retrofit2.http.GET
 import retrofit2.http.POST
+import retrofit2.http.PATCH
 import retrofit2.http.Path
 import retrofit2.http.Query
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 interface LeagueApi {
+    @GET("api/v1/sports")
+    suspend fun sports(): List<SportConfig>
+
+    @GET("api/v1/clubs")
+    suspend fun clubs(): List<Club>
+
+    @GET("api/v1/leagues/{id}/management")
+    suspend fun leagueManagement(@Path("id") id: String): kotlinx.serialization.json.JsonObject
+
+    @POST("api/v1/leagues")
+    suspend fun createLeague(@Body body: kotlinx.serialization.json.JsonObject): kotlinx.serialization.json.JsonObject
+
+    @POST("api/v1/matches")
+    suspend fun createMatch(@Body body: kotlinx.serialization.json.JsonObject): kotlinx.serialization.json.JsonObject
+
+    @GET("api/v1/management/products")
+    suspend fun managedProducts(): List<Product>
+
+    @POST("api/v1/products")
+    suspend fun createProduct(@Body body: kotlinx.serialization.json.JsonObject): kotlinx.serialization.json.JsonObject
+
+    @PATCH("api/v1/products/{id}/variants/{variant}")
+    suspend fun updateVariant(@Path("id") id: String, @Path("variant") variant: String, @Body body: kotlinx.serialization.json.JsonObject): kotlinx.serialization.json.JsonObject
+
+    @GET("api/v1/orders")
+    suspend fun orders(): List<kotlinx.serialization.json.JsonObject>
+
+    @PATCH("api/v1/orders/{id}/status")
+    suspend fun orderStatus(@Path("id") id: String, @Body body: kotlinx.serialization.json.JsonObject): kotlinx.serialization.json.JsonObject
     @POST("api/v1/auth/login")
     suspend fun login(@Body body: LoginRequest): LoginResponse
 
@@ -26,6 +56,9 @@ interface LeagueApi {
 
     @GET("api/v1/fixtures")
     suspend fun fixtures(@Query("league_id") leagueId: String?): List<Fixture>
+
+    @GET("api/v1/fixtures/highlights")
+    suspend fun highlights(): List<Fixture>
 
     @GET("api/v1/matches/{id}")
     suspend fun match(@Path("id") matchId: String): MatchDetail
@@ -51,8 +84,14 @@ interface LeagueApi {
     @GET("api/v1/products")
     suspend fun products(): List<Product>
 
-    @POST("audit/v1/checkout")
+    @POST("api/v1/checkout")
     suspend fun checkout(@Body body: CheckoutRequest): CheckoutResponse
+
+    @GET("api/v1/orders/{id}/receipt-email")
+    suspend fun receiptDelivery(@Path("id") orderId: String): ReceiptDelivery
+
+    @GET("api/v1/checkout/preferences")
+    suspend fun checkoutPreferences(): CheckoutPreferences
 
     @POST("audit/v1/events")
     suspend fun event(@Body body: EventRequest): EventResponse
@@ -63,7 +102,7 @@ interface LeagueApi {
     @GET("audit/v1/roster/history/{id}")
     suspend fun history(@Path("id") playerId: String): PlayerHistory
 
-    @POST("audit/v1/offline-sync")
+    @POST("api/v1/offline-sync")
     suspend fun sync(@Body body: SyncRequest): SyncResponse
 }
 
@@ -108,7 +147,7 @@ suspend fun <T> apiCall(block: suspend () -> T): T =
 
 /** Plain-language text for any failure. Never shows raw codes to the user. */
 fun friendlyError(e: Throwable): String = when (e) {
-    is ApiException -> friendlyCode(e.code)
+    is ApiException -> if (e.code == "SYNC_REJECTED") e.message else friendlyCode(e.code)
     is IOException -> "Can't reach the server. Check your connection or the server address in Settings."
     else -> "Something went wrong. Please try again."
 }
@@ -145,5 +184,6 @@ fun friendlyCode(code: String?): String = when (code) {
     "MIN_POSITION_VIOLATION" -> "This would leave the squad without enough players in that position."
     "SPORT_NOT_FOUND" -> "That sport isn't set up on the server."
     "INVALID_BASE_VERSION" -> "Your phone had newer data than the server. Refresh and try again."
+    "SCHEDULE_CONFLICT" -> "A team already has a match at that time. Choose another time."
     else -> "The server refused this ($code)."
 }

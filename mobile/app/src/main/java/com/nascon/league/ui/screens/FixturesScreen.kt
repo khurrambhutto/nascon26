@@ -1,5 +1,6 @@
 package com.nascon.league.ui.screens
 
+import androidx.compose.material3.TextButton
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -53,6 +54,7 @@ import com.nascon.league.ui.components.ScreenHeader
 import com.nascon.league.ui.components.SectionLabel
 import com.nascon.league.ui.components.TeamBadge
 import com.nascon.league.ui.prettyTime
+import com.nascon.league.ui.humanize
 import com.nascon.league.ui.theme.Pitch
 import com.nascon.league.ui.theme.contentOn
 import com.nascon.league.ui.theme.edge
@@ -65,6 +67,10 @@ abstract class LeagueScopedViewModel<T>(startLeague: String) : LoadViewModel<T>(
     val selectedLeague = MutableStateFlow(startLeague)
 
     init {
+        refreshLeagues()
+    }
+
+    fun refreshLeagues() {
         viewModelScope.launch {
             runCatching { ServiceLocator.repo.leagues().data }.onSuccess { leagues.value = it }
         }
@@ -83,19 +89,30 @@ class FixturesViewModel(startLeague: String) : LeagueScopedViewModel<List<Fixtur
 }
 
 @Composable
-fun FixturesScreen(session: Session, onOpenMatch: (String) -> Unit) {
-    val vm: FixturesViewModel = viewModel { FixturesViewModel(session.user.league_id ?: DEFAULT_LEAGUE) }
+fun FixturesScreen(session: Session, onManage: () -> Unit = {}, onOpenMatch: (String) -> Unit) {
+    val vm: FixturesViewModel = viewModel { FixturesViewModel("__all_sports__") }
     val state by vm.state.collectAsStateWithLifecycle()
     val leagues by vm.leagues.collectAsStateWithLifecycle()
     val selected by vm.selectedLeague.collectAsStateWithLifecycle()
+    val syncRevision by ServiceLocator.repo.syncRevision.collectAsStateWithLifecycle()
+    androidx.compose.runtime.LaunchedEffect(syncRevision) { if (syncRevision > 0) vm.load() }
+    androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+        vm.refreshLeagues()
+        vm.load()
+    }
 
     Column(Modifier.fillMaxSize()) {
         ScreenHeader(
             title = "Matches",
-            subtitle = leagues.firstOrNull { it.league_id == selected }?.name,
-            actions = { RefreshButton(vm::load) },
+            subtitle = if (selected == "__all_sports__") "One match from every sport" else leagues.firstOrNull { it.league_id == selected }?.name,
+            actions = {
+                if (session.user.role in setOf("super_admin", "league_organizer")) {
+                    TextButton(onClick = onManage, modifier = Modifier.testTag("schedule_match_button")) { Text("Schedule") }
+                }
+                RefreshButton { vm.refreshLeagues(); vm.load() }
+            },
         )
-        LeaguePicker(leagues, selected, vm::selectLeague)
+        LeaguePicker(listOf(League("__all_sports__", "All sports")) + leagues, selected, vm::selectLeague)
         Greeting(session.user.name)
 
         when (val s = state) {
@@ -188,6 +205,8 @@ private fun LiveFixtureCard(f: Fixture, onClick: () -> Unit) {
         Column(Modifier.fillMaxWidth().padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 MatchStatusPill(f.status)
+                Spacer(Modifier.width(10.dp))
+                Text(humanize(f.sport_id), color = onBrand, style = MaterialTheme.typography.labelMedium)
                 Spacer(Modifier.weight(1f))
                 f.venue?.takeIf { it.isNotBlank() }?.let { venue ->
                     Text(
@@ -240,6 +259,8 @@ private fun FixtureRow(f: Fixture, onClick: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
+            Text(humanize(f.sport_id), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+            Spacer(Modifier.height(6.dp))
             TeamLine(f.home_name ?: f.home_team_id, f.home_team_id)
             Spacer(Modifier.height(8.dp))
             TeamLine(f.away_name ?: f.away_team_id, f.away_team_id)

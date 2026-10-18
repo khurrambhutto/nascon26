@@ -1,5 +1,7 @@
 package com.nascon.league.ui.screens
 
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.TextButton
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
@@ -25,10 +27,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -201,6 +201,7 @@ fun MatchScreen(matchId: String, session: Session, onBack: () -> Unit, onOpenPro
                 LazyColumn(Modifier.fillMaxSize().testTag("match_detail")) {
                     item { SavedDataNotice(s.savedAt) }
                     item { Scoreboard(match, names) }
+                    item { MatchReminderButton(match, "${names[match.home.team_id]} vs ${names[match.away.team_id]}") }
                     message?.let { m -> item { Banner(m.text, m.kind, onDismiss = vm::dismissMessage) } }
                     if (session.canScore(match.league_id)) {
                         item { ScoringPanel(match, sport, names, busy, vm::send) }
@@ -211,7 +212,7 @@ fun MatchScreen(matchId: String, session: Session, onBack: () -> Unit, onOpenPro
                             PinControls(products, match.pinned_product?.product_id, busy, vm::pin)
                         }
                     }
-                    match.pinned_product?.let { product ->
+                    match.pinned_product?.takeIf { session.user.role in setOf("player", "viewer") }?.let { product ->
                         item {
                             SectionLabel("Featured in the store")
                             PinnedProduct(product.name, product.variants.minOfOrNull { it.price_minor }) { onOpenProduct(product.product_id) }

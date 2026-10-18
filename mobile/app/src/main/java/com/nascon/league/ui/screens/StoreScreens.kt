@@ -1,5 +1,8 @@
 package com.nascon.league.ui.screens
 
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.IconButton
 import androidx.compose.foundation.Image
 import androidx.compose.ui.res.painterResource
 import com.nascon.league.R
@@ -47,13 +50,10 @@ import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -138,13 +138,13 @@ class StoreViewModel : LoadViewModel<List<Product>>() {
 
     fun subtotal(): Long = cart.value.entries.sumOf { (id, qty) -> (variant(id)?.second?.price_minor ?: 0L) * qty }
 
-    fun checkout(discountCode: String, card: TestCard, onPaid: () -> Unit) {
+    fun checkout(discountCode: String, card: TestCard, receiptEmail: String, onPaid: () -> Unit) {
         busy.value = true
         error.value = null
         viewModelScope.launch {
             try {
                 val lines = cart.value.map { (id, qty) -> CartLine(id, qty) }
-                lastOrder.value = repo.checkout(lines, discountCode, card.token)
+                lastOrder.value = repo.checkout(lines, discountCode, card.token, receiptEmail)
                 cart.value = emptyMap()
                 load() // stock changed
                 onPaid()
@@ -231,12 +231,7 @@ private fun ProductCard(product: Product, index: Int, onClick: () -> Unit) {
                 Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(14.dp)).background(tile),
                 contentAlignment = Alignment.Center,
             ) {
-                if (product.name.contains("jersey", ignoreCase = true)) {
-                    Image(painterResource(R.drawable.club_jersey), contentDescription = "Club jersey illustration", modifier = Modifier.fillMaxSize().padding(12.dp))
-                } else {
-                    Text(product.name.take(1).uppercase(), color = Pitch.Ink, fontFamily = Condensed,
-                        fontWeight = FontWeight.Bold, style = MaterialTheme.typography.displayMedium)
-                }
+                com.nascon.league.ui.components.ProductArtwork(product)
             }
             Spacer(Modifier.height(10.dp))
             Text(product.name, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -290,12 +285,7 @@ fun ProductScreen(vm: StoreViewModel, productId: String, onBack: () -> Unit, onO
                 Modifier.fillMaxWidth().aspectRatio(1.4f).clip(RoundedCornerShape(20.dp)).background(Pitch.Peach),
                 contentAlignment = Alignment.Center,
             ) {
-                if (product.name.contains("jersey", ignoreCase = true)) {
-                    Image(painterResource(R.drawable.club_jersey), contentDescription = "Club jersey illustration", modifier = Modifier.fillMaxSize().padding(12.dp))
-                } else {
-                    Text(product.name.take(1).uppercase(), color = Pitch.Ink, fontFamily = Condensed,
-                        fontWeight = FontWeight.Bold, style = MaterialTheme.typography.displayLarge)
-                }
+                com.nascon.league.ui.components.ProductArtwork(product)
             }
             Spacer(Modifier.height(16.dp))
             Text(selected?.let { money(it.price_minor, it.currency) } ?: "", style = MaterialTheme.typography.headlineSmall)
@@ -367,6 +357,22 @@ fun CartScreen(vm: StoreViewModel, onBack: () -> Unit, onPaid: () -> Unit) {
     var discount by remember { mutableStateOf("") }
     var card by remember { mutableStateOf(TestCard.Pays) }
     var confirm by remember { mutableStateOf(false) }
+    var receiptEmail by androidx.compose.runtime.saveable.rememberSaveable {
+        mutableStateOf(ServiceLocator.repo.session.value?.user?.email?.takeUnless { it.endsWith(".test") }.orEmpty())
+    }
+    var emailEdited by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+    var emailConfigured by remember { mutableStateOf(true) }
+    var deliveryMode by remember { mutableStateOf("external") }
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        try {
+            val preferences = ServiceLocator.repo.checkoutPreferences()
+            if (!emailEdited && receiptEmail.isBlank()) receiptEmail = preferences.default_receipt_email.orEmpty()
+            emailConfigured = preferences.email_delivery_configured
+            deliveryMode = preferences.delivery_mode
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e }
+        catch (_: Exception) { }
+    }
+    val validEmail = receiptEmail.isBlank() || (android.util.Patterns.EMAIL_ADDRESS.matcher(receiptEmail.trim()).matches() && (deliveryMode == "local" || !receiptEmail.trim().endsWith(".test", true)))
     val subtotal = vm.subtotal()
 
     Column(Modifier.fillMaxSize()) {
@@ -399,6 +405,17 @@ fun CartScreen(vm: StoreViewModel, onBack: () -> Unit, onPaid: () -> Unit) {
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).testTag("discount_input"),
             )
+
+            SectionLabel(if (deliveryMode == "local") "Local receipt inbox" else "Email receipt")
+            OutlinedTextField(value = receiptEmail, onValueChange = { receiptEmail = it; emailEdited = true },
+                label = { Text(if (deliveryMode == "local") "Receipt address (optional)" else "Receipt email (optional)") }, singleLine = true, isError = !validEmail,
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Email),
+                supportingText = { Text(if (!validEmail) "Enter a valid receipt address."
+                    else if (deliveryMode == "local") "The PDF will appear in your local inbox on this server. Leave blank to opt out."
+                    else "We’ll email the PDF after a successful payment. Leave blank to download it here.") },
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).testTag("receipt_email_input"))
+            if (!emailConfigured) Text("Email receipts will wait in the queue until the mail server is configured. Your purchase and PDF download still work.",
+                modifier = Modifier.padding(horizontal = 20.dp), style = MaterialTheme.typography.bodySmall)
 
             SectionLabel("Payment")
             Text(
@@ -443,6 +460,7 @@ fun CartScreen(vm: StoreViewModel, onBack: () -> Unit, onPaid: () -> Unit) {
             PrimaryButton(
                 text = if (busy) "Paying" else "Pay ${money(subtotal)}",
                 busy = busy,
+                enabled = validEmail,
                 onClick = { confirm = true },
                 modifier = Modifier.fillMaxWidth().testTag("pay_button"),
             )
@@ -456,7 +474,7 @@ fun CartScreen(vm: StoreViewModel, onBack: () -> Unit, onPaid: () -> Unit) {
             title = { Text("Pay ${money(subtotal)}?") },
             text = { Text("You'll pay with the test card: ${card.title.lowercase()}.") },
             confirmButton = {
-                TextButton(onClick = { confirm = false; vm.checkout(discount, card, onPaid) }, modifier = Modifier.testTag("confirm_pay")) {
+                TextButton(onClick = { confirm = false; vm.checkout(discount, card, receiptEmail, onPaid) }, modifier = Modifier.testTag("confirm_pay")) {
                     Text("Pay now")
                 }
             },
@@ -476,6 +494,17 @@ fun ReceiptScreen(vm: StoreViewModel, onDone: () -> Unit) {
     val o = order ?: run {
         MessageState(Icons.Filled.ShoppingCart, "No receipt yet", "Your receipt appears here after you pay.", "Back to the store", onDone)
         return
+    }
+    var delivery by remember(o.order_id) { mutableStateOf(o.receipt_delivery) }
+    androidx.compose.runtime.LaunchedEffect(o.order_id) {
+        if (delivery.status == "not_requested") return@LaunchedEffect
+        repeat(20) {
+            try { delivery = ServiceLocator.repo.receiptDelivery(o.order_id) }
+            catch (e: kotlinx.coroutines.CancellationException) { throw e }
+            catch (_: Exception) { }
+            if (delivery.status in setOf("sent", "failed", "not_requested")) return@LaunchedEffect
+            kotlinx.coroutines.delay(3_000)
+        }
     }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).testTag("receipt_screen")) {
         AnimatedVisibility(visibleState = entered, enter = fadeIn() + scaleIn()) {
@@ -511,7 +540,20 @@ fun ReceiptScreen(vm: StoreViewModel, onDone: () -> Unit) {
             modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
         )
         pdfError?.let { Banner(it, BannerKind.Error) { pdfError = null } }
+        if (delivery.email != null) Text(when (delivery.status) {
+            "sent" -> if (delivery.mode == "local") "Receipt saved in your local inbox for ${delivery.email}." else "Receipt sent to ${delivery.email}. Check your inbox or spam folder."
+            "waiting_configuration" -> "Your receipt is saved for ${delivery.email}. Email delivery is waiting for the server’s mail setup."
+            "failed" -> "Email delivery failed. Your purchase is complete and you can download the PDF below."
+            "retrying" -> "Email delivery will retry automatically. Your PDF is available below."
+            else -> if (delivery.mode == "local") "Saving receipt to the local inbox for ${delivery.email}." else "Receipt email queued for ${delivery.email}."
+        }, modifier = Modifier.padding(horizontal = 20.dp).testTag("receipt_email_status"))
         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            if (delivery.mode == "local" && delivery.email != null) OutlinedButton(
+                onClick = {
+                    runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(ServiceLocator.repo.serverUrl + "local-mail"))) }
+                        .onFailure { pdfError = "No browser is available. Open ${ServiceLocator.repo.serverUrl}local-mail on your laptop." }
+                }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("open_local_inbox"),
+            ) { Text("Open local inbox") }
             PrimaryButton(
                 text = "Open PDF receipt",
                 onClick = { pdfError = openPdf(context, o, share = false) },

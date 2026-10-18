@@ -14,7 +14,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
 // ArenaOne palette (from mobile/design mockup): warm paper, deep teal ink, terracotta, mint and peach.
-// Primary is the signed-in tenant's colour; Turf is only the fallback before login.
+// One terracotta app theme is shared by sign-in and every signed-in role.
 object Pitch {
     val Chalk = Color(0xFFFFF7EE)      // paper background
     val Card = Color(0xFFFFFFFF)       // raised cards and inputs
@@ -23,7 +23,7 @@ object Pitch {
     val Line = Color(0xFFEADED2)       // hairlines and borders
     val Edge = Color(0xFFDECFC0)       // darker bottom edge of chunky pills/cards
     val Wash = Color(0xFFF7EBDF)       // quiet fills
-    val Turf = Color(0xFFB84432)       // terracotta fallback brand
+    val Turf = Color(0xFFB84432)       // shared terracotta brand
     val Mint = Color(0xFFBCE8D7)       // positive tiles, club banner
     val MintSoft = Color(0xFFE0EEE6)   // soft mint fill (highlight rows)
     val MintDeep = Color(0xFF326B59)   // text/icons on mint, "online"
@@ -66,7 +66,8 @@ fun parseHexColor(hex: String?): Color? = runCatching {
 fun contentOn(color: Color): Color = if (color.luminance() > 0.45f) Pitch.Ink else Color.White
 
 @Composable
-fun LeagueTheme(brand: Color = Pitch.Turf, content: @Composable () -> Unit) {
+fun LeagueTheme(content: @Composable () -> Unit) {
+    val brand = Pitch.Turf
     val onBrand = contentOn(brand)
     val scheme = lightColorScheme(
         primary = brand,

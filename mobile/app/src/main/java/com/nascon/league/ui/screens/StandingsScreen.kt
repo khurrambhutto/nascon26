@@ -84,12 +84,18 @@ fun StandingsScreen(session: Session, onOpenClub: (String) -> Unit) {
     val state by vm.state.collectAsStateWithLifecycle()
     val leagues by vm.leagues.collectAsStateWithLifecycle()
     val selected by vm.selectedLeague.collectAsStateWithLifecycle()
+    val syncRevision by ServiceLocator.repo.syncRevision.collectAsStateWithLifecycle()
+    androidx.compose.runtime.LaunchedEffect(syncRevision) { if (syncRevision > 0) vm.load() }
+    androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+        vm.refreshLeagues()
+        vm.load()
+    }
 
     Column(Modifier.fillMaxSize()) {
         ScreenHeader(
             title = "Table",
             subtitle = leagues.firstOrNull { it.league_id == selected }?.name,
-            actions = { RefreshButton(vm::load) },
+            actions = { RefreshButton { vm.refreshLeagues(); vm.load() } },
         )
         LeaguePicker(leagues, selected, vm::selectLeague)
         when (val s = state) {

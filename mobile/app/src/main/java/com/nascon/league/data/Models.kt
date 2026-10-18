@@ -89,6 +89,8 @@ data class MatchDetail(
     val version: Int = 0,
     val events: List<MatchEvent> = emptyList(),
     val pinned_product: Product? = null,
+    val scheduled_at: String? = null,
+    val venue: String? = null,
 )
 
 /** Sport rules as data. scoring_events values differ per model, so they stay as raw JSON. */
@@ -99,6 +101,7 @@ data class SportConfig(
     val scoring_model: String = "event",
     val scoring_events: Map<String, JsonObject> = emptyMap(),
     val draw_allowed: Boolean = true,
+    val periods: JsonObject = JsonObject(emptyMap()),
 )
 
 // ---------- Standings ----------
@@ -235,7 +238,14 @@ data class CheckoutRequest(
     val items: List<CartLine>,
     val discount_code: String?,
     val payment: PaymentToken,
+    val receipt_email: String? = null,
 )
+
+@Serializable
+data class ReceiptDelivery(val email: String? = null, val status: String = "not_requested", val sent_at: Double? = null, val mode: String = "external")
+
+@Serializable
+data class CheckoutPreferences(val default_receipt_email: String? = null, val email_delivery_configured: Boolean = false, val delivery_mode: String = "external")
 
 @Serializable
 data class OrderItem(val variant_id: String, val quantity: Int, val unit_price_minor: Long)
@@ -257,6 +267,7 @@ data class CheckoutResponse(
     val total_minor: Long,
     val payment: PaymentResult = PaymentResult(),
     val receipt: Receipt,
+    val receipt_delivery: ReceiptDelivery = ReceiptDelivery(),
 )
 
 // ---------- Events ----------

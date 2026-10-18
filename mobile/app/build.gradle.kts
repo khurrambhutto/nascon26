@@ -19,6 +19,11 @@ android {
     }
 
     buildTypes {
+        debug {
+            // Keep the locked submission installed while local changes are tested.
+            applicationIdSuffix = ".local"
+            versionNameSuffix = "-local"
+        }
         release {
             // Signed with the debug key so the judges can install mobile/release/app-release.apk directly.
             signingConfig = signingConfigs.getByName("debug")
@@ -43,6 +48,7 @@ android {
 }
 
 dependencies {
+    testImplementation("junit:junit:4.13.2")
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
     implementation(libs.compose.ui.tooling.preview)

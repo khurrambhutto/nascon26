@@ -1,9 +1,6 @@
 package com.nascon.league.ui.screens
 
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.layout.size
-import androidx.compose.ui.res.painterResource
-import com.nascon.league.R
+import androidx.compose.material3.TextButton
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
@@ -27,7 +24,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -97,6 +93,8 @@ fun LoginScreen(app: AppViewModel) {
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).imePadding()) {
         PitchHero()
+        Text("Offline sign-in works for accounts previously signed in on this phone. Use the same password.",
+            style = MaterialTheme.typography.bodySmall, color = Pitch.Muted, modifier = Modifier.padding(horizontal = 28.dp, vertical = 8.dp))
 
         Column(
             Modifier.fillMaxWidth().widthIn(max = 520.dp).padding(horizontal = 24.dp).navigationBarsPadding(),
@@ -169,18 +167,17 @@ fun LoginScreen(app: AppViewModel) {
 /** Turf block with chalk pitch markings: the app's first impression. */
 @Composable
 private fun PitchHero() {
+    val brand = MaterialTheme.colorScheme.primary
     Box(
-        Modifier.fillMaxWidth().background(Pitch.Turf).statusBarsPadding().height(220.dp),
+        Modifier.fillMaxWidth().background(brand).statusBarsPadding().height(220.dp),
     ) {
         // Animated bouncing ball over chalk pitch lines, behind the title.
         com.nascon.league.ui.components.AnimatedPitch(Modifier.fillMaxSize())
         // Soft bottom scrim keeps the title readable over the animation.
         Box(Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Brush.verticalGradient(
-            listOf(Color.Transparent, Pitch.Turf.copy(alpha = 0.85f)))))
+            listOf(Color.Transparent, brand.copy(alpha = 0.85f)))))
         Column(Modifier.align(Alignment.BottomStart).padding(start = 32.dp, bottom = 36.dp)) {
-            Image(painterResource(R.drawable.arenaone_logo), contentDescription = "ArenaOne logo", modifier = Modifier.size(64.dp))
-            Spacer(Modifier.height(8.dp))
-            Text("arenaone.", style = MaterialTheme.typography.headlineMedium, color = Color.White)
+            Text("ArenaOne", style = MaterialTheme.typography.headlineMedium, color = Color.White)
             Text(
                 "Fixtures, tables and your club. Game on.",
                 style = MaterialTheme.typography.bodyLarge,
