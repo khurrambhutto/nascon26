@@ -71,6 +71,7 @@ services:
     build: ./backend
     command: ["python", "-m", "app.worker"]
     environment: *backend-env
+    volumes: ["recordings:/recordings"]
     depends_on:
       api: {condition: service_healthy}
       local-mail: {condition: service_healthy}
@@ -92,6 +93,9 @@ services:
       MTX_API: "yes"
       MTX_AUTHMETHOD: http
       MTX_AUTHHTTPADDRESS: http://api:8080/internal/media/auth
+      MTX_PATHDEFAULTS_RECORD: "yes"
+      MTX_PATHDEFAULTS_RECORDPATH: /recordings/%path/%Y-%m-%d_%H-%M-%S-%f
+    volumes: ["recordings:/recordings"]
   selenium-hub:
     image: selenium/hub:4.24.0
     container_name: nascon-selenium-hub
@@ -118,5 +122,6 @@ services:
     <<: *browser-node
     image: selenium/node-firefox:4.24.0
 volumes:
+  recordings:
   postgres-data:
   object-data:

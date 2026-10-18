@@ -250,3 +250,21 @@ def test_member_chat_and_websockets(client, login):
     assert client.get("/api/v1/chat/chat-match-m1").json()["sequence"] == 1
     flood = client.post("/api/v1/chat", json={"chat_room_id": "chat-match-m1", "text": "GOOOOAL"}, headers=headers)
     assert flood.status_code == 429
+
+
+def test_athlete_profile_and_follow_graph(client, login):
+    viewer, manager = login("viewer"), login("manager")
+    profile = client.get("/api/v1/athletes/player-alpha-1").json()
+    assert profile["clubs"] == [{"club_id": "club-alpha-1", "name": "Alpha Lions"}] and profile["career"]["played"] >= 1
+    assert client.get("/api/v1/athletes/ghost").status_code == 404
+    results = []
+    threads = [threading.Thread(target=lambda h=h: results.append(client.put("/api/v1/athletes/player-alpha-1/follow", headers=h)))
+               for h in [viewer, manager] * 5]
+    [t.start() for t in threads]
+    [t.join() for t in threads]
+    assert all(r.status_code == 200 for r in results)
+    assert client.get("/api/v1/athletes/player-alpha-1").json()["follower_count"] == 2
+    assert client.delete("/api/v1/athletes/player-alpha-1/follow", headers=viewer).json()["follower_count"] == 1
+    assert client.delete("/api/v1/athletes/player-alpha-1/follow", headers=viewer).json()["follower_count"] == 1
+    assert client.put("/api/v1/athletes/player-alpha-1/follow", headers=GUEST).json()["error"]["code"] == "GUEST_WRITE_FORBIDDEN"
+    assert client.put("/api/v1/athletes/ghost/follow", headers=viewer).status_code == 404

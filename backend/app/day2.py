@@ -6,7 +6,7 @@ from collections import defaultdict, deque
 from fastapi import APIRouter, Body, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 
-from . import auth, costream, live, moderation, observability, qr_guest, scoring, streaming
+from . import athletes, auth, costream, live, moderation, observability, qr_guest, scoring, streaming
 from .common import DomainError, check, fail, now, obj
 from .storage import reader, transaction
 
@@ -201,6 +201,24 @@ def post_chat(request: Request, body: dict = Body(...)):
         db.put("chat", room, chat)
     live.bump("chat:" + room)
     return message
+
+
+@router.get("/api/v1/athletes/{athlete_id}")
+def athlete_profile(athlete_id: str):
+    with reader() as db:
+        return athletes.profile(db, athlete_id)
+
+
+@router.put("/api/v1/athletes/{athlete_id}/follow")
+def follow_athlete(athlete_id: str, request: Request):
+    with transaction() as db:
+        return athletes.follow(db, athlete_id, auth.authenticate(db, request.headers.get("authorization")), True)
+
+
+@router.delete("/api/v1/athletes/{athlete_id}/follow")
+def unfollow_athlete(athlete_id: str, request: Request):
+    with transaction() as db:
+        return athletes.follow(db, athlete_id, auth.authenticate(db, request.headers.get("authorization")), False)
 
 
 # ---------- WebSockets (NFR-1) ----------

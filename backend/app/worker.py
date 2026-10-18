@@ -9,6 +9,7 @@ import logging
 import os
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 from urllib.parse import quote, urlsplit
 
 import httpx
@@ -41,9 +42,35 @@ def upload(path, payload):
         key = hmac.new(key, part.encode(), hashlib.sha256).digest()
     signature = hmac.new(key, string.encode(), hashlib.sha256).hexdigest()
     response = httpx.put(endpoint + uri, content=payload, headers={"Host": host, "x-amz-content-sha256": digest, "x-amz-date": stamp, "Authorization": f"AWS4-HMAC-SHA256 Credential={access}/{scope}, SignedHeaders={signed}, Signature={signature}"}, timeout=5)
-    if response.status_code == 409 and path == "receipts":
+    if response.status_code == 409 and "/" not in path:  # bucket already exists
         return
     response.raise_for_status()
+
+
+RECORDINGS = Path(os.environ.get("RECORDINGS_DIR", "/recordings"))
+
+
+def archive_recordings():
+    """FR-3.2: upload finished MediaMTX recordings to MinIO and index them as VODs.
+
+    A file counts as finished once MediaMTX has stopped writing it for 5 seconds,
+    which happens right after the broadcast ends (or its key is revoked).
+    """
+    for file in sorted(RECORDINGS.glob("live/*/*.mp4")):
+        key, vod_id = file.parent.name, file.parent.name + "-" + file.stem
+        if time.time() - file.stat().st_mtime < 5:
+            continue
+        with transaction() as db:
+            if db.get("vod", vod_id):
+                continue
+            stream = db.get("stream_key", key)
+        upload("vod", b"")
+        upload(f"vod/{key}/{file.name}", file.read_bytes())
+        with transaction() as db:
+            db.put("vod", vod_id, {"vod_id": vod_id, "player_id": stream["player_id"] if stream else None, "stream_key": key,
+                                    "object": f"vod/{key}/{file.name}", "size_bytes": file.stat().st_size,
+                                    "recorded_at": datetime.fromtimestamp(file.stat().st_mtime, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")})
+        log.info("Archived VOD %s", vod_id)
 
 
 def run():
@@ -72,6 +99,10 @@ def run():
                         db.put("outbox", event["event_id"], event)
         except Exception:
             log.exception("Outbox delivery failed; retrying")
+        try:
+            archive_recordings()
+        except Exception:
+            log.exception("VOD archiving failed; retrying")
         try:
             deliver_pending()
         except Exception:
