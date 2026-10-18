@@ -93,7 +93,7 @@ services:
       MTX_API: "yes"
       # WebRTC media over TCP too, advertised on 127.0.0.1 so `adb reverse` phones and local browsers connect.
       MTX_WEBRTCLOCALTCPADDRESS: ":8189"
-      MTX_WEBRTCADDITIONALHOSTS: "127.0.0.1"
+      MTX_WEBRTCADDITIONALHOSTS: ${MEDIA_PUBLIC_HOSTS:-127.0.0.1}  # add the laptop LAN IP for Wi-Fi phones
       MTX_AUTHMETHOD: http
       MTX_AUTHHTTPADDRESS: http://api:8080/internal/media/auth
       MTX_PATHDEFAULTS_RECORD: "yes"
