@@ -1,5 +1,6 @@
 """Repeatable baseline and mobile demo data; sport-specific names live only here."""
 from datetime import date, timedelta
+import time
 from itertools import combinations
 
 from . import auth, roster, scoring
@@ -89,5 +90,5 @@ def day2(store):
     for entity_id, code in (("match-m1", "m1-live"), ("player-alpha-1", "p-alpha-1"), ("club-alpha-1", "c-alpha-1")):
         store.put("qr", entity_id, {"entity_id": entity_id, "short_code": code, "scan_count": 0, "devices": {}, "buckets": {}})
         store.put("qr_code", code, {"entity_id": entity_id})
-    store.put("guest_token", "guest_anon_tok_7721", {"guest_token": "guest_anon_tok_7721", "role": "guest", "merged_into": None})
+    store.put("guest_token", "guest_anon_tok_7721", {"guest_token": "guest_anon_tok_7721", "role": "guest", "merged_into": None, "expires_at": time.time() + 900})
     store.put("cart", "player-alpha-1", {"user_id": "player-alpha-1", "items": []})

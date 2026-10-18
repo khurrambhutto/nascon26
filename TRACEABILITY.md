@@ -77,3 +77,25 @@ Backend: `backend/tests/test_day2.py` (pytest, 189 backend tests total). Grid: `
 | NFR-8 | WCAG 2.1 AA guest player | guest.html: ≥4.5:1 contrast, 48 px targets, ARIA labels/live regions, keyboard + Esc | Selenium DOM checks (testids, modal role=dialog) | Done |
 | NFR-9 | No IP/UA/cookies in scan analytics; erasure within 1 s | qr_guest.record_scan (count, device family, hour bucket only); DELETE /audit/v1/privacy/user/{id} | test_metrics_and_privacy | Done |
 | QA-GRID | Selenium Grid 4 hub + 3 nodes, Appium 2, CI | docker-compose.yml selenium-hub/node-*; .github/workflows/autograde.yml | GET :4444/status ready, 3 nodes; tests/reports/* | Done (Appium cross-surface test is timing-sensitive on the device; passes when run alone) |
+
+## Day 2 completion work, October 18
+
+These additions are local until committed and pushed. Runtime and build evidence is recorded below as checks finish.
+
+| Req ID | Requirement | Implementation | Tests | Status |
+|---|---|---|---|---|
+| FR-3.3-CHAT | Broadcasting players read and send the audience chat | LiveScreens.kt LiveChat; live-context API | test_real_moderation_persists_and_is_room_scoped; Android build | Implemented; device retest pending |
+| FR-4.1-NATIVE | QR browser handoff and native camera scanning | guest.html Open in app; QrScannerScreen.kt; bundled ZXing core 3.5.3 | Android build; Selenium guest suite | Implemented; camera scan device retest pending |
+| FR-3.3-MIX | One combined co-stream video | composer.html canvas/audio mixer publishes WHIP; composition.py manages a headless Chrome session on the existing self-hosted grid | Runtime combined-video probe | Runtime verification pending |
+| FR-5.2-DELIVERY | Invitation/order push, acknowledgement, three retries and durable DLQ | notifications.py; authenticated notification WebSocket; Android LiveNotifications; worker expiry | test_notification_three_attempts_then_dlq; test_invitation_socket_ack_and_real_disconnect | Backend verification in progress; OS background delivery depends on app process and permission |
+| FR-5.3-SANCTIONS | Kicked/muted chat users remain blocked | Transactional per-room chat_guard records | test_real_moderation_persists_and_is_room_scoped | Implemented |
+| FR-3.3-DROP | Real disconnect transfers host and terminates empty sessions | Broadcaster presence WebSocket; independent media disconnect monitor | test_invitation_socket_ack_and_real_disconnect | Implemented; external media timing pending |
+| FR-4.4-REGISTER | Register, merge and return to playback | auth.register; guest auth toggle; mounted live player and saved VOD timestamp | test_guest_expiration_and_registration | Implemented |
+| FR-4.2-EXPIRY | Anonymous tokens expire after 15 minutes | qr_guest token validation and seed expiration | test_guest_expiration_and_registration | Implemented |
+| HEALTH-DEPS | Health checks database, Redis and media | main.health preserves status response and probes configured dependencies | Backend regression and runtime /health | Implemented |
+| FR-3.3-NATIVE | Join, host, invite and control native co-streams | DeepLinkScreen; CostreamTools; presence socket | Android build; backend host tests | Implemented; full device flow pending |
+| FR-4.1-STATUS | Common postponed/cancelled/abandoned event aliases | scoring.validate_event normalizes explicit aliases | test_extra_demo_players_and_status_alias | Implemented; unspecified arbitrary event names remain unsupported |
+| DEMO-PLAYERS | Four independent broadcasting accounts | auth.ensure_demo_players; additive startup/reset | test_extra_demo_players_and_status_alias | player/player2/player3/player4@nascon.test, existing demo password |
+| FR-3.2-REPLAY | Replay archived MP4 recordings | API read-only recording volume; FileResponse supports range requests; guest VOD player | Runtime archive playback probe | Implemented; runtime retest pending |
+
+The user stopped further test/build work during completion. Earlier Android builds succeeded and that APK was installed. Later foreground-service, broadcaster-lifecycle and recovery changes are source-only until rebuilt. The combined publisher reached `COMPOSITE_READY` on the running self-hosted grid; multi-source video/audio and native camera scanning were not exercised after the stop instruction. Existing services were rebuilt and restarted without resetting database volumes; the final source additions require another rebuild/restart. Do not read the rows above as a claim of full end-to-end acceptance.

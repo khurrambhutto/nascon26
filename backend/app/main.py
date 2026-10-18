@@ -145,6 +145,21 @@ def health():
     with transaction() as db:
         if not db.get("meta", "seeded"):
             fail(503, "NOT_READY")
+    dependencies = {"db": "ok"}
+    if cache is not None:
+        try:
+            cache.ping()
+            dependencies["redis"] = "ok"
+        except redis.RedisError:
+            fail(503, "REDIS_NOT_READY")
+    from .streaming import MEDIA_API
+    if MEDIA_API:
+        import urllib.request
+        try:
+            urllib.request.urlopen(MEDIA_API + "/v3/paths/list", timeout=1).close()
+            dependencies["media"] = "ok"
+        except Exception:
+            fail(503, "MEDIA_NOT_READY")
     return {"status": "ok"}
 
 

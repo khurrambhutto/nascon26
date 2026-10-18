@@ -73,9 +73,9 @@ def validate(body):
     return room, messages, failed
 
 
-def dead_letter(store, event_type, target, reason):
+def dead_letter(store, event_type, target, reason, event_id=None):
     """Record a notification that failed all bounded retries (1s, 2s, 4s backoff)."""
-    event_id = "evt-" + uuid4().hex[:12]
+    event_id = event_id or "evt-" + uuid4().hex[:12]
     store.put("dlq", event_id, {"event_id": event_id, "type": event_type, "target": target, "attempts": MAX_ATTEMPTS,
                                 "last_error": reason, "failed_at": now()})
 

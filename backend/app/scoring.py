@@ -150,6 +150,11 @@ def validate_event(body):
     eid = identifier(body.get("event_id"), "event_id")
     mid = identifier(body.get("match_id"), "match_id")
     kind = body.get("type")
+    check(isinstance(kind, str), "type")
+    aliases = {"postpone_match": "match_postponed", "match_status": "status_change", "status_update": "status_change", "postponed": "match_postponed", "postpone": "match_postponed", "match_postpone": "match_postponed",
+               "cancelled": "match_cancelled", "canceled": "match_cancelled", "match_canceled": "match_cancelled",
+               "abandoned": "match_abandoned", "abandon": "match_abandoned"}
+    kind = aliases.get(kind, kind) if isinstance(kind, str) else kind
     check(kind in ("match_init", "match_start", "score", "discipline", "tiebreak_winner", "match_end", "compensation") or kind in STATUS_EVENTS, "type")
     payload = obj(body.get("payload"), "payload")
     if kind == "match_init":

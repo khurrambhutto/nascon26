@@ -38,12 +38,14 @@ services:
     networks:
       default:
         aliases: [backend]  # Selenium nodes may reach the API as http://backend:8080
+    volumes: ["recordings:/recordings:ro"]
     environment: &backend-env
       DATABASE_URL: postgresql+psycopg://nascon:nascon-local@db:5432/nascon
       REDIS_URL: redis://redis:6379/0
       DAY1_SALT: ${DAY1_SALT}
       DAY2_SALT: ${DAY2_SALT}
       MEDIA_API_URL: http://media:9997
+      COMPOSER_GRID_URL: http://selenium-hub:4444
       JWT_SECRET: ${JWT_SECRET:-}
       OBJECT_STORE_URL: http://object-store:9000
       OBJECT_STORE_ACCESS_KEY: nascon-storage

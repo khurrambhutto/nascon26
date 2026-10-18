@@ -199,13 +199,26 @@ def post_chat(request: Request, body: dict = Body(...)):
     room, text = body.get("chat_room_id"), body.get("text")
     check(isinstance(room, str) and room, "chat_room_id")
     check(isinstance(text, str) and 1 <= len(text) <= 500, "text")
-    window, moment = recent_by_sender[user["user_id"]], time.monotonic()
-    while window and window[0] < moment - 2:
-        window.popleft()
-    if len(window) >= 3 or moderation.is_flood(text):
-        fail(429, "RATE_LIMITED", reason="rate_limit_exceeded" if len(window) >= 3 else "flood_character_repeat")
-    window.append(moment)
     masked, flagged = moderation.mask(text)
+    rejected = None
+    with transaction() as db:
+        guard_key = room + "|" + user["user_id"]
+        guard = db.get("chat_guard", guard_key, {"blocked": None, "times": []})
+        if guard["blocked"]:
+            fail(403, "CHAT_" + guard["blocked"].upper())
+        moment = time.time()
+        guard["times"] = [t for t in guard["times"] if t > moment - 2]
+        if len(guard["times"]) >= 3 or moderation.is_flood(text):
+            guard["blocked"] = "muted"
+            db.put("chat_guard", guard_key, guard)
+            rejected = "rate_limit_exceeded" if len(guard["times"]) >= 3 else "flood_character_repeat"
+        else:
+            guard["times"].append(moment)
+            if flagged:
+                guard["blocked"] = "kicked"
+            db.put("chat_guard", guard_key, guard)
+    if rejected:
+        fail(429, "RATE_LIMITED", reason=rejected)
     with transaction() as db:
         chat = room_messages(db, room)
         chat["sequence"] += 1
@@ -336,3 +349,240 @@ async def chat_socket(websocket: WebSocket, room_id: str):
         with reader() as db:
             return {"type": "chat", **room_messages(db, room_id)}
     await push_changes(websocket, "chat:" + room_id, load)
+
+
+@router.post("/api/v1/auth/register", status_code=201)
+def register(body: dict = Body(...)):
+    with transaction() as db:
+        return auth.register(db, body)
+
+
+@router.get("/api/v1/notifications")
+def notification_inbox(request: Request):
+    from . import notifications
+    with transaction() as db:
+        user = auth.authenticate(db, request.headers.get("authorization"))
+        return notifications.pending(db, user["user_id"])
+
+
+@router.post("/api/v1/notifications/{event_id}/ack")
+def notification_ack(event_id: str, request: Request):
+    from . import notifications
+    with transaction() as db:
+        user = auth.authenticate(db, request.headers.get("authorization"))
+        return notifications.acknowledge(db, user["user_id"], event_id)
+
+
+@router.websocket("/ws/notifications")
+async def notification_socket(websocket: WebSocket):
+    from . import notifications
+    try:
+        with reader() as db:
+            user = auth.authenticate(db, websocket.headers.get("authorization") or "Bearer " + websocket.query_params.get("token", ""))
+    except DomainError:
+        await websocket.close(code=4401)
+        return
+    await websocket.accept()
+    try:
+        while True:
+            with transaction() as db:
+                db.put("notification_subscriber", user["user_id"], {"seen": time.time()})
+                messages = notifications.pending(db, user["user_id"])
+            for message in messages:
+                await websocket.send_json(message)
+            try:
+                acknowledgement = await asyncio.wait_for(websocket.receive_json(), timeout=0.2)
+                with transaction() as db:
+                    notifications.acknowledge(db, user["user_id"], acknowledgement["event_id"])
+            except asyncio.TimeoutError:
+                pass
+    except (WebSocketDisconnect, RuntimeError, DomainError, KeyError):
+        pass
+
+
+@router.post("/api/v1/costream", status_code=201)
+def create_costream(request: Request, body: dict = Body(...)):
+    from uuid import uuid4
+    with transaction() as db:
+        player = acting_player(db, request)
+        check(player is not None, "player_id")
+        result, _ = costream.session(db, {"session_id": "cs-session-" + uuid4().hex[:12], "host_player_id": player,
+            "participants": [player], "layout": body.get("layout", "grid_4")})
+        return result
+
+
+@router.post("/api/v1/costream/{session_id}/leave")
+def leave_costream(session_id: str, request: Request):
+    with transaction() as db:
+        result = costream.depart(db, session_id, acting_player(db, request))
+    live.bump("costream:" + session_id)
+    return result
+
+
+@router.websocket("/ws/costream/{session_id}/presence")
+async def broadcaster_presence(websocket: WebSocket, session_id: str):
+    try:
+        with reader() as db:
+            user = auth.authenticate(db, websocket.headers.get("authorization"))
+            player = user.get("player_id")
+            _, current = costream.state(db, session_id)
+            if player not in current["participants"]:
+                raise DomainError(403, "FORBIDDEN")
+    except DomainError:
+        await websocket.close(code=4403)
+        return
+    await websocket.accept()
+    try:
+        while True:
+            await websocket.receive_text()
+    except (WebSocketDisconnect, RuntimeError):
+        with transaction() as db:
+            costream.depart(db, session_id, player)
+        live.bump("costream:" + session_id)
+
+
+@router.get('/api/v1/me/live-context')
+def my_live_context(request: Request):
+    with reader() as db:
+        user = auth.authenticate(db, request.headers.get('authorization'))
+        player = user.get('player_id')
+        for record in db.all('costream'):
+            sid = record['response']['session_id']
+            _, current = costream.state(db, sid)
+            if player in current['participants'] and current['status'] == 'active':
+                return {'room': 'chat-' + sid, 'session_id': sid}
+        club = athletes.club_of(db, db.get('player', player, {}))
+        for match in db.all('match'):
+            if club and club['club_id'] in (match['home_team_id'], match['away_team_id']) and scoring.project(db, match['match_id'])['status'] == 'in_progress':
+                return {'room': 'chat-' + match['match_id'], 'session_id': None}
+        return {'room': 'chat-' + str(player), 'session_id': None}
+
+
+@router.get('/api/v1/public/matches/{match_id}/vod')
+def match_recording(match_id: str):
+    with reader() as db:
+        match = db.require('match', match_id)
+        clubs = (match['home_team_id'], match['away_team_id'])
+        recordings = []
+        for vod in db.all('vod'):
+            player = db.get('player', vod.get('player_id'))
+            club = athletes.club_of(db, player) if player else None
+            if club and club['club_id'] in clubs:
+                recordings.append(vod)
+        return [{'vod_id': v['vod_id'], 'playback_url': '/api/v1/vod/' + v['vod_id']} for v in sorted(recordings, key=lambda v:v['recorded_at'], reverse=True)]
+
+
+@router.get('/api/v1/vod/{vod_id}')
+def recording_file(vod_id: str):
+    from pathlib import Path
+    from fastapi.responses import FileResponse
+    with reader() as db:
+        vod = db.require('vod', vod_id)
+    filename = Path(vod['object']).name
+    folder = (Path('/recordings/live') / vod['stream_key']).resolve()
+    file = (folder / filename).resolve()
+    if folder.parent != Path('/recordings/live') or file.parent != folder or not file.is_file():
+        fail(404, 'RECORDING_NOT_FOUND')
+    return FileResponse(file, media_type='video/mp4')
+
+
+@router.get('/api/v1/athletes')
+def athlete_directory():
+    with reader() as db:
+        return [{'player_id': p['player_id'], 'name': p['name'],
+                 'club': (athletes.club_of(db, p) or {}).get('name'),
+                 'follower_count': athletes.followers(db, p['player_id'])}
+                for p in db.all('player')]
+
+
+@router.get('/api/v1/athletes/{athlete_id}/following')
+def athlete_following(athlete_id: str, request: Request):
+    with reader() as db:
+        user = auth.authenticate(db, request.headers.get('authorization'))
+        db.require('player', athlete_id)
+        return {'following': db.get('follow', user['user_id'] + '|' + athlete_id) is not None,
+                'follower_count': athletes.followers(db, athlete_id)}
+
+
+def account_cart_id(user):
+    return user.get('player_id') or user['user_id']
+
+
+@router.get('/api/v1/cart')
+def account_cart(request: Request):
+    with reader() as db:
+        user = auth.authenticate(db, request.headers.get('authorization'))
+        cart = db.get('cart', account_cart_id(user), {'items': []})
+        lines = []
+        for line in cart['items']:
+            variant = db.require('variant', line['variant_id'])
+            product = next((p for p in db.all('product') if line['variant_id'] in p['variant_ids']), None)
+            if product:
+                auth.tenant_access(user, product['tenant_id'])
+            lines.append({**line, 'name': product['name'] if product else line['variant_id'],
+                          'unit_price_minor': variant['price_minor'], 'stock': variant['stock']})
+        return {'currency': 'PKR', 'items': lines, 'total_items': sum(i['quantity'] for i in lines),
+                'subtotal_minor': sum(i['quantity'] * i['unit_price_minor'] for i in lines)}
+
+
+@router.post('/api/v1/cart/checkout', status_code=201)
+def browser_checkout(request: Request, body: dict = Body(...)):
+    from . import store as merchandise, receipt_email, notifications
+    from .common import identifier
+    order_id = identifier(body.get('order_id'), 'order_id')
+    obj(body.get('payment'), 'payment')
+    with transaction() as db:
+        user = auth.authenticate(db, request.headers.get('authorization'))
+        inputs = {'order_id': order_id, 'user_id': user['user_id'], 'payment': body['payment'],
+                  'discount_code': body.get('discount_code'), 'receipt_email': body.get('receipt_email') or ''}
+        previous = db.get('cart_checkout', order_id)
+        if previous:
+            if previous['request'] != inputs:
+                fail(409, 'DUPLICATE_ORDER_ID')
+            return previous['response']
+        cart_id = account_cart_id(user)
+        cart = db.get('cart', cart_id, {'items': []})
+        check(bool(cart['items']), 'cart')
+        for line in cart['items']:
+            product = next((p for p in db.all('product') if line['variant_id'] in p['variant_ids']), None)
+            if product is None:
+                fail(404, 'VARIANT_NOT_FOUND')
+            auth.tenant_access(user, product['tenant_id'])
+        recipient = receipt_email.address(inputs['receipt_email'])
+        response, created = merchandise.checkout(db, {'order_id': order_id, 'customer_id': user['user_id'],
+            'items': cart['items'], 'discount_code': inputs['discount_code'], 'payment': inputs['payment']})
+        if created:
+            order = db.require('order', order_id)
+            order['receipt_email'] = recipient
+            db.put('order', order_id, order)
+            if recipient:
+                receipt_email.enqueue(db, order_id, recipient)
+            notifications.enqueue(db, user['user_id'], 'order.status_changed', {'order_id': order_id, 'status': 'paid'}, 'paid-' + order_id)
+        db.put('cart', cart_id, {'user_id': cart_id, 'items': []})
+        db.put('cart_checkout', order_id, {'request': inputs, 'response': response})
+        return response
+
+
+@router.post('/api/v1/cart/items')
+def add_account_cart_item(request: Request, body: dict = Body(...)):
+    from .common import integer
+    with transaction() as db:
+        user = auth.authenticate(db, request.headers.get('authorization'))
+        variant_id = body.get('variant_id')
+        check(isinstance(variant_id, str), 'variant_id')
+        quantity = integer(body.get('quantity', 1), 'quantity', 1, 10)
+        variant = db.require('variant', variant_id)
+        product = next((p for p in db.all('product') if variant_id in p['variant_ids']), None)
+        if product is None:
+            fail(404, 'VARIANT_NOT_FOUND')
+        auth.tenant_access(user, product['tenant_id'])
+        cart_id = account_cart_id(user)
+        cart = db.get('cart', cart_id, {'user_id': cart_id, 'items': []})
+        lines = [dict(i) for i in cart['items']]
+        qr_guest.add_items(lines, [{'variant_id': variant_id, 'quantity': quantity}])
+        line = next(i for i in lines if i['variant_id'] == variant_id)
+        if line['quantity'] > variant['stock'] or line['quantity'] > 10:
+            fail(409, 'OUT_OF_STOCK', variant_id=variant_id)
+        cart['items'] = lines
+        db.put('cart', cart_id, cart)
+        return {'total_items': sum(i['quantity'] for i in lines)}

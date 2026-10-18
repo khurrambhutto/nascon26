@@ -57,6 +57,8 @@ def transition(store, order_id, body, user):
     order.setdefault("history", []).append({"status": status, "who": user["user_id"], "when": event["created_at"]})
     store.put("order", order_id, order)
     store.put("outbox", event["event_id"], event)
+    from .notifications import enqueue
+    enqueue(store, order["request"]["customer_id"], "order.status_changed", {"order_id": order_id, "status": status}, event["event_id"])
     response = public_order(order)
     if order.get("refund"):
         response["refund"] = order["refund"]

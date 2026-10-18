@@ -3,6 +3,8 @@ from . import scoring
 
 
 def ensure(store):
+    from .auth import ensure_demo_players
+    ensure_demo_players(store)
     # Only missing records are inserted: restarts preserve edits, scores and purchased stock.
     clubs = [
         ("club-karakoram-falcons", "Karakoram Falcons CC", "Campus Cricket Oval"),

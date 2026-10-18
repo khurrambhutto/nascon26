@@ -63,3 +63,8 @@ main{{display:grid;gap:16px;grid-template-columns:repeat(auto-fill,minmax(280px,
 .row{{display:flex;gap:8px;flex-wrap:wrap}} .btn{{display:inline-flex;align-items:center;min-height:48px;padding:0 16px;border-radius:8px;background:#9c3a2a;color:#fff;text-decoration:none}}
 </style></head><body><header><h1 style="margin:0;font-size:1.25rem">Dynamic QR posters</h1></header><main>{items}</main></body></html>'''
     return HTMLResponse(page)
+
+
+@router.get('/web/composer/{session_id}', response_class=HTMLResponse)
+def composite_source(session_id: str):
+    return HTMLResponse((Path(__file__).parent / 'composer.html').read_text())

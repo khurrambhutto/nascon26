@@ -1,5 +1,6 @@
 """FR-4.x dynamic QR deep links, privacy-safe scan telemetry, guest tokens and atomic cart merge."""
 import secrets
+import time
 from datetime import datetime, timezone
 from io import BytesIO
 
@@ -151,12 +152,15 @@ def is_guest(token):
 
 def new_guest(store):
     token = GUEST_PREFIX + secrets.token_hex(8)
-    store.put("guest_token", token, {"guest_token": token, "role": "guest", "merged_into": None})
+    store.put("guest_token", token, {"guest_token": token, "role": "guest", "merged_into": None, "expires_at": time.time() + 900})
     return {"guest_token": token, "role": "guest", "scopes": ["playback", "score", "guest_cart"]}
 
 
 def stage(store, token, body):
     """Guests may only stage items in a temporary cart (no stock is reserved)."""
+    record = store.get("guest_token", token)
+    if not record or record.get("expires_at", float("inf")) <= time.time():
+        fail(401, "GUEST_TOKEN_EXPIRED")
     obj(body)
     variant_id, quantity = body.get("variant_id"), body.get("quantity", 1)
     check(isinstance(variant_id, str), "variant_id")
@@ -194,6 +198,9 @@ def cart_merge(store, body):
         check(isinstance(item, dict) and isinstance(item.get("variant_id"), str), "guest_cart.variant_id")
         check(type(item.get("quantity")) is int and item["quantity"] >= 1, "guest_cart.quantity")
     check(isinstance(test_block, bool), "test_write_block")
+    record = store.get("guest_token", token)
+    if record and record.get("expires_at", float("inf")) <= time.time():
+        fail(401, "GUEST_TOKEN_EXPIRED")
     # 2. Existence
     if not user_exists(store, user_id):
         fail(404, "PLAYER_NOT_FOUND")

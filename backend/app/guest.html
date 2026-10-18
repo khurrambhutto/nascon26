@@ -39,7 +39,7 @@
 </style>
 </head>
 <body>
-<header><h1 id="title">ArenaOne Live</h1><span id="status-note"></span> <a href="/web/qr" style="color:#fff;margin-left:12px">QR posters</a></header>
+<header><a id="open-native" href="#" style="color:white;float:right;min-height:48px">Open in app</a><h1 id="title">ArenaOne Live</h1><span id="status-note"></span> <a href="/web/qr" style="color:#fff;margin-left:12px">QR posters</a></header>
 <main>
   <section aria-label="Live video">
     <div class="stage" data-testid="guest-video-player" id="player" role="region" aria-label="Live stream video player">
@@ -77,12 +77,38 @@
       <button data-testid="chat-send-btn" id="send" type="submit" aria-label="Send chat message">Send</button>
     </form>
   </section>
+  <section class="card" id="athlete-profile" hidden aria-label="Player profile">
+    <h2 id="athlete-name">Player</h2><p id="athlete-followers"></p>
+    <button id="athlete-follow" type="button" data-testid="athlete-follow">Follow</button>
+    <p id="athlete-career"></p><div id="athlete-clubs"></div>
+    <h3>Upcoming matches</h3><div id="athlete-fixtures"></div>
+    <h3>Recorded streams</h3><div id="athlete-recordings"></div>
+  </section>
+  <p id="page-error" role="alert" style="color:#a1001b"></p>
 </main>
+
+<div class="modal" id="checkout-modal" role="dialog" aria-modal="true" aria-labelledby="checkout-title" hidden>
+  <form class="card" id="checkout-form">
+    <h2 id="checkout-title">Checkout</h2>
+    <div id="checkout-lines"></div><p id="checkout-total"></p>
+    <label>Mock payment <select id="payment-token" style="min-height:48px;width:100%">
+      <option value="tok_success">Successful payment</option><option value="tok_declined">Declined card</option><option value="tok_capture_fail">Capture failure</option>
+    </select></label>
+    <label>Discount code <input id="checkout-discount" placeholder="Optional WELCOME10"></label>
+    <label>Receipt email <input id="checkout-email" type="email" placeholder="Optional"></label>
+    <p id="checkout-error" role="alert" style="color:#a1001b"></p>
+    <p id="checkout-receipt" role="status"></p>
+    <button id="checkout-pay" type="submit" data-testid="checkout-pay">Pay now</button>
+    <button class="secondary" id="checkout-close" type="button">Return to stream</button>
+  </form>
+</div>
 
 <div class="modal" data-testid="progressive-auth-modal" id="auth-modal" role="dialog" aria-modal="true" aria-labelledby="auth-title" hidden>
   <form class="card" id="auth-form">
     <h2 id="auth-title" style="margin:0">Sign in to continue</h2>
     <p class="muted" style="margin:0">Your cart is kept. Sign in to chat or check out.</p>
+    <label id="register-name-label" hidden>Name <input id="register-name" autocomplete="name"></label>
+    <button type="button" class="secondary" id="register-toggle">Create account instead</button>
     <label>Email <input id="email" type="email" autocomplete="username" value="viewer@nascon.test"></label>
     <label>Password <input id="password" type="password" autocomplete="current-password"></label>
     <p id="auth-error" role="alert" style="color:#a1001b;margin:0"></p>
@@ -97,7 +123,9 @@ const wsBase = (location.protocol === "https:" ? "wss://" : "ws://") + location.
 let guestToken = sessionStorage.getItem("guest_token");
 let memberToken = sessionStorage.getItem("member_token");
 let cartCount = Number(sessionStorage.getItem("guest_cart_count") || 0);
-let pendingAction = null;
+let pendingAction = null, registering = false;
+$("open-native").href = "nascon://" + (ctx.kind === "costream" ? "stream/" : "entity/") + ctx.id;
+$("register-toggle").onclick = () => {registering=!registering;$("register-name-label").hidden=!registering;$("auth-title").textContent=registering?"Create account":"Sign in to continue";$("register-toggle").textContent=registering?"Sign in instead":"Create account instead"};
 $("cart-count").textContent = String(cartCount);
 $("title").textContent = ctx.kind === "costream" ? "Co-stream " + ctx.id : ctx.kind === "match" ? "Match " + ctx.id : ctx.id;
 if (ctx.view === "notice") $("status-note").textContent = "Match " + (ctx.state || "updated");
@@ -172,7 +200,7 @@ function showScore(data) {
   $("home").textContent = data.home_name;
   $("away").textContent = data.away_name;
   const product = data.pinned_product;
-  if (product) { $("merch-name").textContent = product.name; $("overlay-merch").textContent = "🛒 " + product.name; }
+  if (product) { if(product.product_id!=="prod-jersey-001" && product.variants?.length)pinnedVariant=product.variants[0].variant_id; $("merch-name").textContent = product.name; $("overlay-merch").textContent = "🛒 " + product.name; }
 }
 
 function showChat(data) {
@@ -188,17 +216,52 @@ function showChat(data) {
 function openAuth(action) {
   pendingAction = action;
   $("auth-modal").hidden = false;
+  const v=document.querySelector("video");if(v)sessionStorage.setItem("resume:"+ctx.id,String(v.currentTime));
+  // Embedded live WebRTC playback stays mounted throughout authentication.
   $("password").focus();
 }
 
+let pinnedVariant = "var-jersey-001-L";
+let checkoutOrderId = null, checkoutFingerprint = null;
+async function refreshAccountCart() {
+  const response=await fetch("/api/v1/cart",{headers:{Authorization:"Bearer "+memberToken}});
+  if(!response.ok)throw Error("Your session expired. Sign in again.");
+  const cart=await response.json();cartCount=cart.total_items;$("cart-count").textContent=String(cartCount);return cart;
+}
 $("add").addEventListener("click", async () => {
-  cartCount += 1;
-  $("cart-count").textContent = String(cartCount);
-  sessionStorage.setItem("guest_cart_count", String(cartCount));
-  const token = await ensureGuest();
-  fetch("/api/v1/guest/cart", {method: "POST", headers: {"Content-Type": "application/json", Authorization: "Bearer " + token},
-    body: JSON.stringify({variant_id: "var-jersey-001-L", quantity: 1})});
+  try {
+    const member=Boolean(memberToken), token=memberToken || await ensureGuest();
+    let response=await fetch(member?"/api/v1/cart/items":"/api/v1/guest/cart",{method:"POST",headers:{"Content-Type":"application/json",Authorization:"Bearer "+token},body:JSON.stringify({variant_id:pinnedVariant,quantity:1})});
+    if(response.status===401&&!member){guestToken=null;sessionStorage.removeItem("guest_token");const fresh=await ensureGuest();response=await fetch("/api/v1/guest/cart",{method:"POST",headers:{"Content-Type":"application/json",Authorization:"Bearer "+fresh},body:JSON.stringify({variant_id:pinnedVariant,quantity:1})})}
+    if(!response.ok){const body=await response.json();throw Error(body.error?.message || "Could not add this item")}
+    const staged=await response.json();cartCount=member?staged.total_items:staged.count;
+    $("cart-count").textContent=String(cartCount);if(!member)sessionStorage.setItem("guest_cart_count",String(cartCount));
+    $("page-error").textContent="";
+  }catch(error){$("page-error").textContent=error.message}
 });
+
+async function openCheckout() {
+  if(!memberToken)return openAuth(openCheckout);
+  try{
+    const cart=await refreshAccountCart();$("checkout-lines").replaceChildren(...cart.items.map(item=>{const p=document.createElement("p");p.textContent=item.name+" × "+item.quantity+" · PKR "+(item.unit_price_minor*item.quantity/100).toFixed(2);return p}));
+    $("checkout-total").textContent="Subtotal: PKR "+(cart.subtotal_minor/100).toFixed(2);
+    $("checkout-error").textContent="";$("checkout-modal").hidden=false;$("checkout-pay").disabled=cart.items.length===0;$("payment-token").focus();
+  }catch(error){memberToken=null;sessionStorage.removeItem("member_token");openAuth(openCheckout)}
+}
+$("checkout-form").addEventListener("submit",async event=>{
+  event.preventDefault();const button=$("checkout-pay");button.disabled=true;
+  const payload={payment:{token:$("payment-token").value},discount_code:$("checkout-discount").value.trim()||null,receipt_email:$("checkout-email").value.trim()};
+  const fingerprint=JSON.stringify(payload);if(!checkoutOrderId||checkoutFingerprint!==fingerprint){checkoutOrderId="web-"+crypto.randomUUID();checkoutFingerprint=fingerprint}
+  try{
+    const response=await fetch("/api/v1/cart/checkout",{method:"POST",headers:{"Content-Type":"application/json",Authorization:"Bearer "+memberToken},body:JSON.stringify({...payload,order_id:checkoutOrderId})});
+    const order=await response.json();if(!response.ok)throw Error(order.error?.message||"Checkout failed");
+    $("checkout-error").textContent="";$("checkout-receipt").textContent="Paid PKR "+(order.total_minor/100).toFixed(2)+" · Order "+order.order_id+" ";
+    const bytes=Uint8Array.from(atob(order.receipt.pdf_base64),c=>c.charCodeAt(0)),url=URL.createObjectURL(new Blob([bytes],{type:"application/pdf"}));
+    const link=document.createElement("a");link.href=url;link.download=order.order_id+".pdf";link.textContent="Download PDF receipt";link.style.display="inline-block";link.style.minHeight="48px";$("checkout-receipt").append(link);
+    cartCount=0;$("cart-count").textContent="0";sessionStorage.setItem("guest_cart_count","0");checkoutOrderId=null;checkoutFingerprint=null;
+  }catch(error){$("checkout-error").textContent=error.message;button.disabled=false}
+});
+$("checkout-close").onclick=()=>{$("checkout-modal").hidden=true};
 
 async function sendChat() {
   const text = $("chat-input").value.trim();
@@ -211,36 +274,71 @@ async function sendChat() {
 }
 
 $("chat-form").addEventListener("submit", (event) => { event.preventDefault(); sendChat(); });
-$("checkout").addEventListener("click", () => memberToken ? alert("Cart saved to your account.") : openAuth(null));
+$("checkout").addEventListener("click", openCheckout);
 $("auth-close").addEventListener("click", () => { $("auth-modal").hidden = true; });
 document.addEventListener("keydown", (event) => { if (event.key === "Escape") $("auth-modal").hidden = true; });
 
 $("auth-form").addEventListener("submit", async (event) => {
   event.preventDefault();
-  const response = await fetch("/api/v1/auth/login", {method: "POST", headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({email: $("email").value, password: $("password").value})});
+  const response = await fetch(registering ? "/api/v1/auth/register" : "/api/v1/auth/login", {method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({...{email: $("email").value, password: $("password").value}, ...(registering ? {name: $("register-name").value} : {})})});
   if (!response.ok) { $("auth-error").textContent = "Email or password is incorrect."; return; }
   const login = await response.json();
   memberToken = login.token;
   sessionStorage.setItem("member_token", memberToken);
-  if (cartCount > 0) {
-    await fetch("/audit/v1/guest/cart-merge", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({
+  if (Number(sessionStorage.getItem("guest_cart_count") || 0) > 0) {
+    const merge = await fetch("/audit/v1/guest/cart-merge", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({
       guest_token: await ensureGuest(), registered_user_id: login.user.player_id || login.user.user_id,
-      guest_cart: [{variant_id: "var-jersey-001-L", quantity: cartCount}]})});
+      guest_cart: [{variant_id: pinnedVariant, quantity: Number(sessionStorage.getItem("guest_cart_count") || 0)}]})});
+    if (!merge.ok) { $("auth-error").textContent="Cart could not be merged. Check stock and retry."; return; }
+    sessionStorage.setItem("guest_cart_count","0");guestToken=null;sessionStorage.removeItem("guest_token");
   }
+  await refreshAccountCart();
   $("auth-modal").hidden = true;
+  const v=document.querySelector("video"), saved=Number(sessionStorage.getItem("resume:"+ctx.id));
+  if(v&&Number.isFinite(saved))v.currentTime=saved;
   if (pendingAction) pendingAction();
 });
 
-if (ctx.kind === "match") subscribe("/ws/matches/" + ctx.id, showScore);
+if (ctx.kind === "match" && ctx.view === "vod") {
+  fetch("/api/v1/public/matches/"+ctx.id+"/vod").then(r=>r.json()).then(recordings=>{
+    if (!recordings.length) {$("stage-body").textContent="Recording is processing. Please try again shortly.";return;}
+    const video=document.createElement("video");video.controls=true;video.style.width="100%";video.src=recordings[0].playback_url;
+    video.addEventListener("loadedmetadata",()=>{const saved=Number(sessionStorage.getItem("resume:"+ctx.id));if(Number.isFinite(saved))video.currentTime=saved});
+    $("stage-body").replaceChildren(video);
+  });
+} else if (ctx.kind === "match") subscribe("/ws/matches/" + ctx.id, showScore);
 else $("score").textContent = "LIVE";
 if (ctx.kind === "costream") subscribe("/ws/costream/" + ctx.id, (session) => {
   $("overlay-score").textContent = "Host: " + (session.active_host || "—") + " · " + session.layout;
-  showStreams(session.streams, session.layout, session.spotlight);
+  const signature="composite:"+ctx.id;
+  if(shownStreams!==signature){shownStreams=signature;const f=document.createElement("iframe");f.src=location.protocol+"//"+location.hostname+":8889/costream/"+ctx.id+"/?autoplay=true&muted=true";f.allow="autoplay; fullscreen";f.title="Combined co-stream";$("stage-body").replaceChildren(f)}
   showHostTools(session);
 });
 subscribe("/ws/chat/" + ctx.room, showChat);
 ensureGuest();
+if(memberToken)refreshAccountCart().catch(()=>{});
+
+let followingAthlete=false;
+async function showAthlete(){
+  if(ctx.kind!=="player")return;
+  const response=await fetch("/api/v1/athletes/"+ctx.id);if(!response.ok){$("page-error").textContent="Player profile unavailable";return}
+  const profile=await response.json();$("athlete-profile").hidden=false;$("athlete-name").textContent=profile.name;$("athlete-followers").textContent=profile.follower_count+" followers";
+  $("athlete-career").textContent=Object.entries(profile.career).map(([k,v])=>k+": "+v).join(" · ");
+  $("athlete-clubs").textContent=profile.clubs.map(c=>c.name).join(", ")||"Independent player";
+  $("athlete-fixtures").replaceChildren(...profile.upcoming_fixtures.map(f=>{const p=document.createElement("p"),a=document.createElement("a");a.href="/web/matches/"+f.match_id+"/preview";a.textContent=f.match_id+" · "+(f.scheduled_at||"Time to be confirmed");p.append(a);return p}));
+  $("athlete-recordings").replaceChildren(...profile.vod_archive.map(v=>{const p=document.createElement("p"),a=document.createElement("a");a.href="/api/v1/vod/"+encodeURIComponent(v.vod_id);a.textContent="Watch recording · "+v.recorded_at;p.append(a);return p}));
+  if(memberToken){const r=await fetch("/api/v1/athletes/"+ctx.id+"/following",{headers:{Authorization:"Bearer "+memberToken}});if(r.ok)followingAthlete=(await r.json()).following}
+  $("athlete-follow").textContent=followingAthlete?"Unfollow":"Follow";
+}
+async function toggleAthleteFollow(){
+  if(!memberToken)return openAuth(toggleAthleteFollow);
+  const response=await fetch("/api/v1/athletes/"+ctx.id+"/follow",{method:followingAthlete?"DELETE":"PUT",headers:{Authorization:"Bearer "+memberToken}});
+  if(response.status===401){memberToken=null;sessionStorage.removeItem("member_token");return openAuth(toggleAthleteFollow)}
+  if(!response.ok){$("page-error").textContent="Could not update follow";return}followingAthlete=(await response.json()).following;await showAthlete();
+}
+$("athlete-follow").onclick=toggleAthleteFollow;
+showAthlete().catch(()=>{$("page-error").textContent="Unable to load player profile"});
 </script>
 </body>
 </html>

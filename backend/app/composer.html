@@ -1,0 +1,26 @@
+<!doctype html><html><body><canvas id="mix" width="960" height="540"></canvas><script>
+const id=location.pathname.split('/').pop(), media='http://media:8889', canvas=document.querySelector('canvas'), ctx=canvas.getContext('2d');
+let state={streams:[],layout:'grid_4'}, inputs={}, output, audio=new AudioContext(), bus=audio.createMediaStreamDestination();
+async function negotiate(pc,url){
+ const offer=await pc.createOffer();await pc.setLocalDescription(offer);
+ await new Promise(resolve=>{if(pc.iceGatheringState==='complete')resolve();else{pc.addEventListener('icegatheringstatechange',()=>{if(pc.iceGatheringState==='complete')resolve()});setTimeout(resolve,1000)}});
+ const reply=await fetch(url,{method:'POST',headers:{'Content-Type':'application/sdp'},body:pc.localDescription.sdp});
+ if(!reply.ok)throw Error('Media negotiation '+reply.status);await pc.setRemoteDescription({type:'answer',sdp:await reply.text()});
+}
+async function attach(s){
+ const pc=new RTCPeerConnection(),v=document.createElement('video');v.muted=true;v.autoplay=true;v.playsInline=true;
+ const entry=inputs[s.player_id]={pc,v,key:s.stream_key};
+ pc.addTransceiver('video',{direction:'recvonly'});pc.addTransceiver('audio',{direction:'recvonly'});
+ pc.ontrack=e=>{if(e.track.kind==='video'){v.srcObject=new MediaStream([e.track]);v.play().catch(()=>{})}else{entry.source=audio.createMediaStreamSource(new MediaStream([e.track]));entry.gain=audio.createGain();entry.source.connect(entry.gain).connect(bus)}};
+ try{await negotiate(pc,media+'/live/'+s.stream_key+'/whep')}catch(e){pc.close();delete inputs[s.player_id]}
+}
+async function refresh(){try{
+ const r=await fetch('/api/v1/public/costream/'+id);if(!r.ok)return;state=await r.json();
+ for(const [p,e] of Object.entries(inputs)){if(!state.streams.some(s=>s.player_id===p&&s.stream_key===e.key)){e.pc.close();e.source?.disconnect();delete inputs[p]}}
+ for(const s of state.streams){if(s.stream_key&&!inputs[s.player_id])await attach(s);if(inputs[s.player_id]?.gain)inputs[s.player_id].gain.gain.value=s.muted?0:1}
+}catch(e){}setTimeout(refresh,400)}
+function draw(){ctx.fillStyle='#111';ctx.fillRect(0,0,960,540);let streams=state.streams||[];if(state.spotlight)streams=[...streams].sort((a,b)=>(b.player_id===state.spotlight)-(a.player_id===state.spotlight));
+ streams.slice(0,4).forEach((s,i)=>{const single=streams.length===1||state.layout==='solo',spot=state.layout==='spotlight';let w=single?960:480,h=single?540:270,x=(i%2)*480,y=Math.floor(i/2)*270;
+ if(spot){w=i===0?720:240;h=i===0?540:180;x=i===0?0:720;y=i===0?0:(i-1)*180}const v=inputs[s.player_id]?.v;if(v?.readyState>=2)ctx.drawImage(v,x,y,w,h);ctx.fillStyle='white';ctx.font='20px sans-serif';ctx.fillText(s.player_id,x+10,y+28)});requestAnimationFrame(draw)}
+(async()=>{await audio.resume();const stream=canvas.captureStream(20);for(const t of bus.stream.getAudioTracks())stream.addTrack(t);output=new RTCPeerConnection();stream.getTracks().forEach(t=>output.addTrack(t,stream));draw();await negotiate(output,media+'/costream/'+id+'/whip');document.title='COMPOSITE_READY';refresh()})().catch(e=>{document.title='COMPOSITE_ERROR '+e});
+</script></body></html>

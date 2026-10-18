@@ -249,7 +249,7 @@ def test_member_chat_and_websockets(client, login):
         assert any(score.receive_json()["score_text"] == "1 - 1" for _ in range(5))
     assert client.get("/api/v1/chat/chat-match-m1").json()["sequence"] == 1
     flood = client.post("/api/v1/chat", json={"chat_room_id": "chat-match-m1", "text": "GOOOOAL"}, headers=headers)
-    assert flood.status_code == 429
+    assert flood.status_code == 403  # Prior profanity kicked this sender from this room.
 
 
 def test_athlete_profile_and_follow_graph(client, login):

@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="3" time="49.864" timestamp="2026-10-18T12:39:39.482059+05:00" hostname="khurram"><testcase classname="tests.appium.test_mobile_deeplink" name="test_deep_link_opens_native_screen_without_login[nascon://entity/match-m1-match-m1]" time="41.721" /><testcase classname="tests.appium.test_mobile_deeplink" name="test_deep_link_opens_native_screen_without_login[nascon://stream/cs-session-101-cs-session-101]" time="1.992" /><testcase classname="tests.appium.test_mobile_deeplink" name="test_cross_surface_costream_chat_sync" time="5.890"><failure message="selenium.common.exceptions.TimeoutException: Message:">phone = &lt;appium.webdriver.webdriver.WebDriver (session="446384ea-fa25-4328-ba86-085895e3a028")&gt;
+
+    def test_cross_surface_costream_chat_sync(phone):
+        call("/audit/v1/costream/session", {"session_id": "cs-session-101", "host_player_id": "player-alpha-1",
+                                            "participants": ["player-alpha-1", "player-alpha-2"], "layout": "grid_2"})
+&gt;       open_link(phone, "nascon://stream/cs-session-101", "cs-session-101")  # the mobile app joins the co-stream
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/appium/test_mobile_deeplink.py:75: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/appium/test_mobile_deeplink.py:61: in open_link
+    WebDriverWait(driver, 5, poll_frequency=0.2).until(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;selenium.webdriver.support.wait.WebDriverWait (session="446384ea-fa25-4328-ba86-085895e3a028")&gt;
+method = &lt;function open_link.&lt;locals&gt;.&lt;lambda&gt; at 0x77032f846660&gt;, message = ''
+
+    def until(self, method: Callable[[D], Literal[False] | T], message: str = "") -&gt; T:
+        """Wait until the method returns a value that is not False.
+    
+        Calls the method provided with the driver as an argument until the
+        return value does not evaluate to ``False``.
+    
+        Args:
+            method: A callable object that takes a WebDriver instance as an
+                argument.
+            message: Optional message for TimeoutException.
+    
+        Returns:
+            The result of the last call to `method`.
+    
+        Raises:
+            TimeoutException: If 'method' does not return a truthy value within
+                the WebDriverWait object's timeout.
+    
+        Example:
+            &gt;&gt;&gt; from selenium.webdriver.common.by import By
+            &gt;&gt;&gt; from selenium.webdriver.support.wait import WebDriverWait
+            &gt;&gt;&gt; from selenium.webdriver.support import expected_conditions as EC
+            &gt;&gt;&gt;
+            &gt;&gt;&gt; # Wait until an element is visible on the page
+            &gt;&gt;&gt; wait = WebDriverWait(driver, 10)
+            &gt;&gt;&gt; element = wait.until(EC.visibility_of_element_located((By.ID, "exampleId")))
+            &gt;&gt;&gt; print(element.text)
+        """
+        screen = None
+        stacktrace = None
+    
+        end_time = time.monotonic() + self._timeout
+        while True:
+            try:
+                value = method(self._driver)
+                if value:
+                    return value
+            except self._ignored_exceptions as exc:
+                screen = getattr(exc, "screen", None)
+                stacktrace = getattr(exc, "stacktrace", None)
+            if time.monotonic() &gt; end_time:
+                break
+            time.sleep(self._poll)
+&gt;       raise TimeoutException(message, screen, stacktrace)
+E       selenium.common.exceptions.TimeoutException: Message:
+
+tests/.venv/lib/python3.12/site-packages/selenium/webdriver/support/wait.py:121: TimeoutException</failure></testcase></testsuite></testsuites>

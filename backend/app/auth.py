@@ -45,7 +45,7 @@ def authenticate(store, header):
     except jwt.PyJWTError:
         fail(401, "UNAUTHENTICATED")
     user = store.get("user", claims["sub"])
-    if not user:
+    if not user or user.get("erased"):
         fail(401, "UNAUTHENTICATED")
     return user
 
@@ -104,3 +104,27 @@ def authorize(store, user, action, target=None):
 
 def matrix(store):
     return {"tokens": {role: token(store.require("user", "u-" + short)) for short, role in ROLES.items()}, "context": {"tenant_id": "tenant-alpha", "foreign_tenant_id": "tenant-beta", "own_league_id": "league-alpha-1", "other_league_id": "league-alpha-2", "foreign_league_id": "league-beta-1", "own_club_id": "club-alpha-1", "other_club_id": "club-alpha-2", "foreign_club_id": "club-beta-1", "own_player_id": "player-alpha-1", "other_player_id": "player-alpha-2", "foreign_player_id": "player-beta-1"}}
+
+
+def register(store, body):
+    from uuid import uuid4
+    from .common import check, text
+    email = text(body.get("email"), "email", 254).strip().lower()
+    password = text(body.get("password"), "password", 256)
+    name = text(body.get("name"), "name", 100)
+    check("@" in email and len(password) >= 8, "email", "password")
+    if any(u["email"].lower() == email for u in store.all("user")):
+        fail(409, "EMAIL_ALREADY_REGISTERED")
+    user = {"user_id": "u-" + uuid4().hex, "email": email, "name": name, "role": "viewer", "tenant_id": "tenant-alpha",
+            "player_id": None, "league_id": None, "club_id": None, "password_hash": password_hash(password, email)}
+    store.put("user", user["user_id"], user)
+    return {"token": token(user), **identity(store, user)}
+
+
+def ensure_demo_players(store):
+    for suffix, player_id, tenant in [("2", "player-alpha-2", "tenant-alpha"), ("3", "player-beta-1", "tenant-beta"), ("4", "player-beta-2", "tenant-beta")]:
+        uid = "u-player" + suffix
+        if store.get("player", player_id) and not store.get("user", uid):
+            email = "player" + suffix + "@nascon.test"
+            store.put("user", uid, {"user_id": uid, "email": email, "name": "Player " + suffix, "role": "player", "tenant_id": tenant,
+                "player_id": player_id, "league_id": None, "club_id": None, "password_hash": password_hash("Nascon@26", email)})

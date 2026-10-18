@@ -25,7 +25,7 @@ def erase(store, user_id):
     if user is None and player is None:
         fail(404, "PLAYER_NOT_FOUND")
     for account in ([user] if user else []) + linked_users:
-        account.update(name="Anonymized User", email=f"anon-{account['user_id']}@deleted.invalid")
+        account.update(erased=True, name="Anonymized User", email=f"anon-{account['user_id']}@deleted.invalid")
         store.put("user", account["user_id"], account)
     if player:
         player["name"] = "Anonymized Player"

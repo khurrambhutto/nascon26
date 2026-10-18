@@ -31,7 +31,7 @@
 ## ADR-005: Custom JWT authorization and a server-side guest boundary
 - Status: Accepted (amended for Part II)
 - Context: Five roles need tenant and ownership boundaries with no managed BaaS; Part II adds zero-login guests who must never write.
-- Decision: Verify HS256 tokens and apply centralized ownership policies. Guests get `guest_anon_tok_*` tokens; one middleware rejects every POST/PUT/PATCH/DELETE carrying a guest token (or an anonymous chat post) with 403 GUEST_WRITE_FORBIDDEN before any handler runs. Co-stream invites are HMAC-signed with DAY2_SALT.
+- Decision: Verify HS256 tokens and apply centralized ownership policies. Guests get `guest_anon_tok_*` tokens with 15-minute validity; self-hosted viewer registration is available; one middleware rejects every POST/PUT/PATCH/DELETE carrying a guest token (or an anonymous chat post) with 403 GUEST_WRITE_FORBIDDEN before any handler runs. Co-stream invites are HMAC-signed with DAY2_SALT.
 - Alternatives: External identity services violate self-hosting or add deployment overhead.
 - Consequences: Demo credentials seed locally with individual PBKDF2 salts; the token key derives from the private team salt unless a separate JWT_SECRET is supplied.
 
@@ -40,7 +40,7 @@
 - Context: Inventory changes and order notifications cannot diverge.
 - Decision: Commit inventory, order, receipt and outbox in one transaction; worker delivers to Redis and MinIO. Authenticated checkout adds one SMTP receipt job per paid order, claimed with a DB lease and retried outside checkout. The default SMTP sink captures receipts locally in Postgres with a customer-scoped browser inbox.
 - Alternatives: Publishing before commit creates events for rolled-back orders.
-- Consequences: Delivery is at least once with stable event IDs and email Message-IDs for deduplication. Missing SMTP credentials retain the job without blocking purchase or PDF download; a crash after SMTP acceptance may cause a retry of the same message. Part II: notifications that fail 3 bounded retries are parked in a persistent DLQ (exposed via /audit/v1/moderation/test and nascon_dlq_depth); guest cart merge is one locked transaction keyed by guest_token, so a replay after a network switch returns the merged cart and never double-adds.
+- Consequences: User notifications require acknowledgement and retry after 1, 2 and 4 seconds; exhausted events enter the durable DLQ. Android keeps its WebSocket in a foreground service while signed in. Delivery is at least once with stable event IDs and email Message-IDs for deduplication. Missing SMTP credentials retain the job without blocking purchase or PDF download; a crash after SMTP acceptance may cause a retry of the same message. Part II: notifications that fail 3 bounded retries are parked in a persistent DLQ (exposed via /audit/v1/moderation/test and nascon_dlq_depth); guest cart merge is one locked transaction keyed by guest_token, so a replay after a network switch returns the merged cart and never double-adds.
 
 ## ADR-007: Native mobile with persistent offline replay
 - Status: Accepted
@@ -54,4 +54,4 @@
 - Context: Hidden vectors compare exact fields, errors, signatures and concurrent behavior; Part II also grades Selenium Grid, Appium and k6.
 - Decision: Use pytest contract/algorithm tests, a 20-buyer race, measured coverage, and clean Compose smoke checks. Part II adds: Selenium Grid 4 (hub + 2 Chrome + 1 Firefox in Compose) running tests/selenium in parallel (-n 3); Appium 2 deep-link and cross-surface tests on a physical phone; the spec's exact k6 profile; and a GitHub Actions workflow running all of it on push.
 - Alternatives: Manual demonstrations alone miss edge cases and rollback failures.
-- Consequences: Tests are split by domain and coverage is generated from actual executions.
+- Consequences: Tests are split by domain and coverage is generated from actual executions. Co-stream composition reuses a self-hosted headless Chrome grid slot, mixing canvas video and Web Audio into one WHIP output, avoiding a new offline media dependency. Each active co-stream consumes one Chrome slot.

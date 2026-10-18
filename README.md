@@ -102,3 +102,11 @@ An order and its durable outbox event commit together. The worker publishes orde
 Match SSE streams detect committed changes every second and send `event: update`; the mobile contract also permits a three-second polling fallback.
 
 For deployment outside the competition, replace demo credentials/secrets and restrict the audit/reset interface to a trusted evaluation network.
+
+## Day 2 live controls
+
+Player accounts `player@nascon.test`, `player2@nascon.test`, `player3@nascon.test` and `player4@nascon.test` use `Nascon@26` and have independent stream keys. In **Me → Go live**, start a co-stream, invite a player ID, and read/send the shared audience chat. Invite notifications open the native session, where the invitee can join and broadcast. Hosts can mute/unmute, spotlight and remove participants. **Me → Scan QR** uses the camera and bundled ZXing 3.5.3 without a runtime download. Browser QR pages provide **Open in app** and the protected-action prompt supports account creation.
+
+The worker starts one headless Chrome session per active co-stream on the existing self-hosted Selenium Grid. That session mixes video on a canvas and audio through Web Audio, then publishes one combined WHIP stream at `costream/{session_id}`. The returned HLS URL and native/browser player use that combined stream. This consumes one Chrome slot per active session. Notification delivery uses authenticated WebSockets, stable event IDs, acknowledgement and three attempts with 1/2/4-second waits before durable DLQ storage. Android keeps the connection in a foreground service while signed in; Android notification permission is required. System force-stop still prevents delivery until the app is reopened.
+
+The latest foreground-service, broadcaster-lifecycle and alias/recovery additions were coded after the user's instruction to stop tests and Gradle builds. They require a new APK build to appear in an installed app. The earlier APK was built and installed during this session; source changes made afterward are not claimed to be in that APK.

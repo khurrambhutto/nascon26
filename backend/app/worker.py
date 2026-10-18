@@ -75,6 +75,9 @@ def archive_recordings():
 
 def run():
     initialize()
+    from .composition import monitor
+    import threading
+    threading.Thread(target=monitor, daemon=True).start()
     queue = redis.Redis.from_url(os.environ["REDIS_URL"], socket_timeout=3)
     while True:
         try:
@@ -100,6 +103,13 @@ def run():
         except Exception:
             log.exception("Outbox delivery failed; retrying")
         try:
+            from . import composition, notifications
+            composition.tick()
+            with transaction() as db:
+                notifications.expire_deliveries(db)
+        except Exception:
+            log.exception("Live delivery/composition retry")
+        try:
             archive_recordings()
         except Exception:
             log.exception("VOD archiving failed; retrying")
@@ -107,7 +117,7 @@ def run():
             deliver_pending()
         except Exception:
             log.exception("Receipt email worker failed; retrying")
-        time.sleep(1)
+        time.sleep(0.2)
 
 
 if __name__ == "__main__":

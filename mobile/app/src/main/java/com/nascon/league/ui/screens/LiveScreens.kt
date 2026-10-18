@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
@@ -38,6 +39,17 @@ import com.nascon.league.data.ServiceLocator
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.*
 
+private const val AUTO_PUBLISH = """
+(function auto() {
+  var codec = document.getElementById('video-codec'), button = document.getElementById('publish-button');
+  if (!codec || !button || codec.options.length === 0) { setTimeout(auto, 300); return; }
+  for (var i = 0; i < codec.options.length; i++) if (codec.options[i].value.toLowerCase().indexOf('h264') >= 0) { codec.value = codec.options[i].value; break; }
+  var set = function (id, value) { var e = document.getElementById(id); if (e) e.value = value; };
+  set('video-bitrate', '1500'); set('video-width', '1280'); set('video-height', '720');
+  button.click();
+})();
+"""
+
 /** MediaMTX serves its WebRTC pages on :8889 of the same host the API uses. */
 fun mediaUrl(path: String): String {
     val api = android.net.Uri.parse(ServiceLocator.repo.serverUrl)
@@ -55,7 +67,12 @@ fun MediaWebView(url: String, modifier: Modifier = Modifier) {
                 settings.javaScriptEnabled = true
                 settings.mediaPlaybackRequiresUserGesture = false
                 settings.domStorageEnabled = true
-                webViewClient = android.webkit.WebViewClient()  // keep MediaMTX redirects inside the app
+                webViewClient = object : android.webkit.WebViewClient() {  // keep MediaMTX redirects inside the app
+                    override fun onPageFinished(view: WebView, url: String) {
+                        // Go Live: pick H264 720p and press MediaMTX's publish button automatically.
+                        if (url.contains("/publish")) view.evaluateJavascript(AUTO_PUBLISH, null)
+                    }
+                }
                 webChromeClient = object : WebChromeClient() {
                     override fun onPermissionRequest(request: PermissionRequest) = request.grant(request.resources)
                 }
@@ -89,14 +106,14 @@ fun GoLiveScreen(sessionHint: String? = null, onBack: () -> Unit) {
         if (!granted) message = "Camera and microphone are needed to broadcast."
     }
     LaunchedEffect(Unit) { permissions.launch(arrayOf(android.Manifest.permission.CAMERA, android.Manifest.permission.RECORD_AUDIO)) }
-    // No outer scroll: the WebView must receive swipes to scroll MediaMTX's settings and Publish button.
-    Column(Modifier.fillMaxSize().statusBarsPadding().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    // Publishing is automatic, so the screen can scroll to the co-stream tools and chat below the camera.
+    Column(Modifier.fillMaxSize().statusBarsPadding().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Go live", style = MaterialTheme.typography.headlineMedium)
         Text(message, modifier = Modifier.testTag("golive_status"))
         val current = key
         if (current != null && granted) {
-            Box(Modifier.fillMaxWidth().weight(1f).testTag("golive_preview")) { MediaWebView(mediaUrl("live/$current/publish"), Modifier.fillMaxSize()) }
-            Text("Tip: choose H264, scroll to the bottom of the box, tap publish. OBS: rtmp://<laptop>:1935/live/$current", style = MaterialTheme.typography.bodySmall)
+            Box(Modifier.fillMaxWidth().height(360.dp).testTag("golive_preview")) { MediaWebView(mediaUrl("live/$current/publish"), Modifier.fillMaxSize()) }
+            Text("Publishing automatically (H264 720p). OBS alternative: rtmp://<laptop>:1935/live/$current", style = MaterialTheme.typography.bodySmall)
             OutlinedButton(onClick = {
                 scope.launch { ServiceLocator.repo.myStreamKey("revoke"); key = null; message = "Broadcast ended. The recording appears in your VOD archive." }
             }, modifier = Modifier.testTag("golive_stop")) { Text("End broadcast") }

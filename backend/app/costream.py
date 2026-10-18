@@ -91,7 +91,12 @@ def invite(store, session_id, host_player, player_id):
     if store.get("player", player_id) is None:
         fail(404, "PLAYER_NOT_FOUND")
     token = sign2(session_id, {"invitee": player_id, "session_id": session_id})
-    return {"session_id": session_id, "player_id": player_id, "invite_token": token}
+    payload = {"session_id": session_id, "player_id": player_id, "invite_token": token}
+    from .notifications import enqueue
+    for user in store.all("user"):
+        if user.get("player_id") == player_id:
+            enqueue(store, user["user_id"], "costream.invite", payload, "invite-" + session_id + "-" + player_id)
+    return payload
 
 
 def join(store, session_id, body):
@@ -140,3 +145,14 @@ def control(store, session_id, host_player, body):
         if live_state["spotlight"] == target:
             live_state["spotlight"] = None
     return save(store, session_id, record, live_state)
+
+
+def depart(store, session_id, player_id):
+    record, current = state(store, session_id)
+    if player_id in current["participants"]:
+        current["participants"].remove(player_id)
+    if current["active_host"] == player_id:
+        current["active_host"] = next(iter(current["participants"]), None)
+    if not current["participants"]:
+        current["status"] = "terminated"
+    return save(store, session_id, record, current)
