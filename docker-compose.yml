@@ -1,6 +1,7 @@
 services:
   db:
     image: postgres:16-alpine
+    command: ["postgres", "-c", "max_connections=300"]
     environment:
       POSTGRES_USER: nascon
       POSTGRES_PASSWORD: nascon-local
@@ -31,6 +32,8 @@ services:
       retries: 20
   api:
     build: ./backend
+    # 4 workers for NFR-2 (550 concurrent VUs); shared state lives in PostgreSQL and Redis.
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080", "--workers", "4"]
     ports: ["8080:8080"]
     networks:
       default:

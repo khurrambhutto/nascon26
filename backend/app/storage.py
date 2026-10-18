@@ -8,14 +8,14 @@ import os
 from contextlib import contextmanager
 from threading import RLock
 
-from sqlalchemy import JSON, Column, Integer, MetaData, String, Table, create_engine, delete, insert, select, update
+from sqlalchemy import JSON, Column, Integer, MetaData, String, Table, create_engine, delete, insert, select, text, update
 from sqlalchemy.pool import StaticPool
 
 metadata = MetaData()
 records = Table("domain_records", metadata, Column("kind", String(40), primary_key=True), Column("id", String(128), primary_key=True), Column("data", JSON, nullable=False))
 mutex = Table("domain_mutex", metadata, Column("id", Integer, primary_key=True))
 url = os.environ.get("DATABASE_URL", "sqlite:///./nascon.db")
-options = {"connect_args": {"check_same_thread": False}} if url.startswith("sqlite") else {"pool_pre_ping": True, "pool_size": 10, "max_overflow": 20}
+options = {"connect_args": {"check_same_thread": False}} if url.startswith("sqlite") else {"pool_pre_ping": True, "pool_size": 10, "max_overflow": 30}
 if url in ("sqlite://", "sqlite:///:memory:"):
     options["poolclass"] = StaticPool
 engine = create_engine(url, **options)
@@ -23,8 +23,11 @@ local_lock = RLock()
 
 
 def initialize():
-    metadata.create_all(engine)
     with engine.begin() as connection:
+        if engine.dialect.name == "postgresql":
+            # Several uvicorn workers start at once; only one may create the schema at a time.
+            connection.execute(text("SELECT pg_advisory_xact_lock(2026)"))
+        metadata.create_all(connection)
         if connection.execute(select(mutex.c.id)).first() is None:
             connection.execute(insert(mutex).values(id=1))
 

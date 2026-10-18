@@ -6,7 +6,7 @@ from .common import fail
 def metrics(store):
     streams, kbps = streaming.media_stats()
     values = [
-        ("nascon_active_ws_connections", "gauge", "Open WebSocket connections (scores and chat).", live.connections),
+        ("nascon_active_ws_connections", "gauge", "Open WebSocket connections (scores and chat).", live.connections()),
         ("nascon_active_streams_total", "gauge", "Media paths currently receiving a broadcast.", streams),
         ("nascon_stream_bitrate_kbps", "gauge", "Combined inbound broadcast bitrate in kbit/s.", kbps),
         ("nascon_dlq_depth", "gauge", "Notifications parked in the Dead-Letter Queue.", len(store.all("dlq"))),

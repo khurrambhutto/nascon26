@@ -84,6 +84,14 @@ async def boundaries(request, call_next):
             json.loads(request._body.decode("utf-8"), parse_constant=reject_constant)
         except (ValueError, UnicodeDecodeError):
             return JSONResponse(DomainError(400, "VALIDATION_ERROR", fields=["body"]).body, status_code=400)
+    if request.method != "GET" and request.url.path != "/audit/v1/moderation/test":
+        response = await rate_limited(request, call_next)
+        live.bump("data")  # invalidate cached reads (QR inspect, DLQ depth) in every worker
+        return response
+    return await rate_limited(request, call_next)
+
+
+async def rate_limited(request, call_next):
     if request.url.path.startswith("/api/v1/"):
         ip, allowed = request.client.host if request.client else "unknown", None
         if cache is not None:
@@ -144,8 +152,7 @@ def health():
 def reset(body: ResetRequest | None = Body(default=None)):
     with transaction() as db:
         result = seed.reset(db, body.data() if body else None)
-    for key in list(live.versions):
-        live.bump(key)
+    live.bump("epoch")
     return result
 
 

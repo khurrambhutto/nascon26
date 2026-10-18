@@ -42,19 +42,33 @@ def qr_export(entity_id: str, fmt: str):
     return Response(content, media_type=media_type)
 
 
+def inspect_qr(entity_id):
+    with reader() as db:
+        return qr_guest.resolve(db, entity_id, inspect=True)
+
+
 @router.get("/audit/v1/qr/{entity_id}")
-def qr_resolve(entity_id: str, request: Request, inspect: bool = False):
-    if inspect:
-        with reader() as db:
-            return qr_guest.resolve(db, entity_id, inspect=True)
+async def qr_resolve(entity_id: str, request: Request, inspect: bool = False):
+    if inspect:  # hot path under k6 (NFR-2): served from cache until the next write
+        try:
+            return live.cached("qr:" + entity_id, lambda: inspect_qr(entity_id))
+        except DomainError as error:
+            return JSONResponse(error.body, status_code=error.status)
+    return await asyncio.to_thread(scan_qr, entity_id, request.headers.get("user-agent"))
+
+
+def scan_qr(entity_id, user_agent):
     with transaction() as db:
-        return qr_guest.resolve(db, entity_id, user_agent=request.headers.get("user-agent"))
+        result = qr_guest.resolve(db, entity_id, user_agent=user_agent)
+    live.bump("data")
+    return result
 
 
 @router.get("/q/{short_code}")
 def short_link(short_code: str, request: Request):
     with transaction() as db:
         route = qr_guest.short_link(db, short_code, request.headers.get("user-agent"))
+    live.bump("data")
     return RedirectResponse(route, status_code=302)
 
 
@@ -64,19 +78,29 @@ def guest_cart_merge(body: dict = Body(...)):
         return qr_guest.cart_merge(db, body)
 
 
+def read_dlq():
+    with reader() as db:
+        return moderation.dlq_status(db)
+
+
 @router.post("/audit/v1/moderation/test")
-def moderation_test(body: dict = Body(...)):
+async def moderation_test(body: dict = Body(...)):
     room, messages, failed = moderation.validate(body)
     filtered, kicked, muted = moderation.moderate(messages)
     if failed:
-        with transaction() as db:
-            for _ in range(failed):
-                moderation.dead_letter(db, "notification.push", room, "simulated downstream failure")
-            dlq = moderation.dlq_status(db)
-    else:
-        with reader() as db:
-            dlq = moderation.dlq_status(db)
+        dlq = await asyncio.to_thread(enqueue_failures, room, failed)
+    else:  # hot path under k6: chat moderation is pure, DLQ depth is cached
+        dlq = live.cached("dlq", read_dlq)
     return moderation.response(room, filtered, kicked, muted, dlq)
+
+
+def enqueue_failures(room, failed):
+    with transaction() as db:
+        for _ in range(failed):
+            moderation.dead_letter(db, "notification.push", room, "simulated downstream failure")
+        dlq = moderation.dlq_status(db)
+    live.bump("data")
+    return dlq
 
 
 @router.get("/metrics")
@@ -182,13 +206,13 @@ def post_chat(request: Request, body: dict = Body(...)):
 # ---------- WebSockets (NFR-1) ----------
 
 async def push_changes(websocket, key, load):
-    """Send a snapshot now and again whenever live.versions[key] moves."""
+    """Send a snapshot now and again whenever live.version(key) moves."""
     await websocket.accept()
-    live.connections += 1
+    live.connected(1)
     try:
         seen = None
         while True:
-            version = live.versions[key]
+            version = live.version(key)
             if version != seen:
                 seen = version
                 await websocket.send_json(await asyncio.to_thread(load))
@@ -196,7 +220,7 @@ async def push_changes(websocket, key, load):
     except (WebSocketDisconnect, RuntimeError, DomainError):
         pass
     finally:
-        live.connections -= 1
+        live.connected(-1)
 
 
 @router.websocket("/ws/matches/{match_id}")
