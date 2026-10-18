@@ -72,4 +72,6 @@ def reset(store, body=None):
     match["pinned_product_id"] = "prod-jersey-001"
     store.put("match", "demo-m3", match)
     store.put("meta", "seeded", True)
+    from .demo_catalog import ensure
+    ensure(store)
     return {"status": "reset_complete", "seed": seed, "sports": ["football", "basketball", "cricket", "esports"], "tenants": ["tenant-alpha", "tenant-beta"], "stock": {v["variant_id"]: v["stock"] for v in store.all("variant") if v["variant_id"] in stock or v["variant_id"].startswith("var-jersey-")}}

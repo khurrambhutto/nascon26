@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ArenaOne local inbox</title>
+<style>
+:root{font-family:system-ui,sans-serif;color:#293d3a;background:#fff7ee;color-scheme:light}*{box-sizing:border-box}body{max-width:1080px;margin:0 auto;padding:28px 20px}header{display:flex;align-items:center;justify-content:space-between;gap:16px;border-bottom:1px solid #eaded2;padding-bottom:18px}h1{font-size:24px;margin:0}h2{font-size:19px;margin-top:0}p{line-height:1.5}.muted{color:#6f675f}button,input{font:inherit;border:1px solid #8c8075;border-radius:5px;min-height:44px;padding:10px 13px}button{cursor:pointer;background:#b84432;color:white;border-color:#b84432}button.secondary{background:white;color:#b84432}button:disabled{opacity:.6;cursor:wait}input{background:white;color:#293d3a;width:100%}label{display:block;margin:16px 0 6px}form{max-width:420px;margin:28px 0}form button{margin-top:18px}nav{display:flex;gap:10px}table{width:100%;border-collapse:collapse;background:white}th,td{text-align:left;padding:13px 12px;border-bottom:1px solid #eaded2;overflow-wrap:anywhere}th{font-weight:600}section{margin-top:26px}pre{font:inherit;white-space:pre-wrap;line-height:1.6;overflow-wrap:anywhere}#status{min-height:24px}#detail{border-top:1px solid #decfc0;padding-top:22px}[hidden]{display:none!important}@media(max-width:600px){body{padding:20px 12px}header{align-items:flex-start;flex-direction:column}th:first-child,td:first-child{display:none}th,td{padding:12px 7px;font-size:14px}}
+button{white-space:nowrap}th:last-child,td:last-child{width:100px}
+</style>
+<header><h1>ArenaOne · Local inbox</h1><nav id="tools" hidden><button id="refresh" class="secondary">Refresh</button><button id="logout" class="secondary">Sign out</button></nav></header>
+<p class="muted">Receipts stay on this server. This inbox captures SMTP email locally without sending it to an external mailbox.</p>
+<form id="login"><h2>Sign in to your receipts</h2><p>Use your ArenaOne account. Platform admins can review all receipts.</p>
+<label for="email">Account email</label><input id="email" type="email" autocomplete="username" required>
+<label for="password">Account password</label><input id="password" type="password" autocomplete="current-password" required>
+<button id="sign-in" type="submit">Sign in</button></form>
+<p id="status" role="status" aria-live="polite"></p>
+<section id="inbox" hidden><h2>Messages</h2><p id="empty" hidden>No receipts yet. Make a successful purchase with a receipt address, then refresh.</p>
+<table id="messages"><thead><tr><th>Received</th><th>Recipient</th><th>Subject</th><th>Message</th></tr></thead><tbody id="rows"></tbody></table></section>
+<section id="detail" hidden><h2 id="subject"></h2><p id="meta" class="muted"></p><pre id="body"></pre><button id="pdf">Download PDF receipt</button></section>
+<script>
+const el=id=>document.getElementById(id);
+let token=sessionStorage.getItem('arenaone-mail-token')||'',selected=null;
+function showStatus(text){el('status').textContent=text}
+function signedIn(value){el('login').hidden=value;el('inbox').hidden=!value;el('tools').hidden=!value;if(!value)el('detail').hidden=true}
+async function api(path,options={}){
+  const response=await fetch(path,{...options,headers:{'Content-Type':'application/json',...(token?{Authorization:'Bearer '+token}:{}),...(options.headers||{})}});
+  if(!response.ok){if(response.status===401){token='';sessionStorage.removeItem('arenaone-mail-token');signedIn(false)}throw Error(response.status===401?'Sign in with a valid ArenaOne email and password.':response.status===403?'This receipt belongs to another account.':'The inbox is unavailable. Try again shortly.')}
+  return response;
+}
+async function refresh(){
+  try{showStatus('Loading receipts…');const messages=await(await api('/api/v1/mailbox')).json();signedIn(true);el('rows').replaceChildren();el('empty').hidden=messages.length>0;el('messages').hidden=messages.length===0;
+    for(const message of messages){const tr=document.createElement('tr');for(const text of [new Date(message.received_at).toLocaleString(),message.recipient,message.subject]){const td=document.createElement('td');td.textContent=text;tr.append(td)}const td=document.createElement('td'),button=document.createElement('button');button.className='secondary';button.textContent='Open';button.addEventListener('click',()=>openMessage(message.message_id));td.append(button);tr.append(td);el('rows').append(tr)}showStatus(messages.length+' receipt'+(messages.length===1?'':'s'))
+  }catch(error){showStatus(error.message)}
+}
+async function openMessage(id){try{const message=await(await api('/api/v1/mailbox/'+encodeURIComponent(id))).json();selected=id;el('subject').textContent=message.subject;el('meta').textContent='From '+message.sender+' · To '+message.recipient;el('body').textContent=message.body;el('detail').hidden=false;el('detail').scrollIntoView({behavior:'smooth',block:'start'})}catch(error){showStatus(error.message)}}
+el('login').addEventListener('submit',async event=>{event.preventDefault();el('sign-in').disabled=true;try{showStatus('Signing in…');const login=await(await api('/api/v1/auth/login',{method:'POST',body:JSON.stringify({email:el('email').value.trim(),password:el('password').value})})).json();token=login.token;sessionStorage.setItem('arenaone-mail-token',token);el('password').value='';await refresh()}catch(error){showStatus(error.message)}finally{el('sign-in').disabled=false}});
+el('refresh').addEventListener('click',refresh);
+el('logout').addEventListener('click',()=>{token='';selected=null;sessionStorage.removeItem('arenaone-mail-token');el('rows').replaceChildren();el('body').textContent='';signedIn(false);showStatus('Signed out.')});
+el('pdf').addEventListener('click',async()=>{if(!selected)return;try{const response=await api('/api/v1/mailbox/'+encodeURIComponent(selected)+'/receipt.pdf');const url=URL.createObjectURL(await response.blob()),a=document.createElement('a');a.href=url;a.download='ArenaOne-receipt.pdf';a.click();setTimeout(()=>URL.revokeObjectURL(url),30000)}catch(error){showStatus(error.message)}});
+signedIn(Boolean(token));if(token)refresh();
+</script>
+</html>

@@ -10,7 +10,7 @@ def test_health_reset_login_and_mobile_lists(client, login):
     assert sign("evt-1", {"team_id": "t1", "event_type": "goal"}) == "972a8b558690b19121cc5bea84978f85e8eb15a3735018db36616bab1d7ec501"
     headers = login()
     assert client.get("/api/v1/me", headers=headers).json()["user"]["role"] == "club_manager"
-    assert len(client.get("/api/v1/leagues", headers=headers).json()) == 2
+    assert len(client.get("/api/v1/leagues", headers=headers).json()) == 5
     fixtures = client.get("/api/v1/fixtures?league_id=league-alpha-1", headers=headers).json()
     live = next(m for m in fixtures if m["status"] == "in_progress")
     assert live["home_name"] == "Alpha Lions"
@@ -19,7 +19,7 @@ def test_health_reset_login_and_mobile_lists(client, login):
     assert {m["status"] for m in fixtures} == {"completed", "upcoming", "in_progress"}
     assert client.get("/api/v1/matches/demo-m3", headers=headers).json()["pinned_product"]["product_id"] == "prod-jersey-001"
     assert len(client.get("/api/v1/clubs/club-alpha-1", headers=headers).json()["roster"]) == 5
-    assert len(client.get("/api/v1/products", headers=headers).json()) == 3
+    assert len(client.get("/api/v1/products", headers=headers).json()) == 5
     assert client.get("/api/v1/standings/league-alpha-1", headers=headers).status_code == 200
     assert client.get("/api/v1/sports/football", headers=headers).json()["scoring_model"] == "event"
 

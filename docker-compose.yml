@@ -40,7 +40,17 @@ services:
       OBJECT_STORE_URL: http://object-store:9000
       OBJECT_STORE_ACCESS_KEY: nascon-storage
       OBJECT_STORE_SECRET_KEY: nascon-storage-local
+      SMTP_DELIVERY_MODE: ${SMTP_DELIVERY_MODE:-local}
+      SMTP_HOST: ${SMTP_HOST:-local-mail}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+      SMTP_FROM: ${SMTP_FROM:-receipts@arenaone.local}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_TLS_MODE: ${SMTP_TLS_MODE:-none}
+      SMTP_TIMEOUT: ${SMTP_TIMEOUT:-10}
+      DEMO_RECEIPT_EMAIL: ${DEMO_RECEIPT_EMAIL:-}
     depends_on:
+      local-mail: {condition: service_healthy}
       db: {condition: service_healthy}
       redis: {condition: service_healthy}
       object-store: {condition: service_healthy}
@@ -55,6 +65,18 @@ services:
     environment: *backend-env
     depends_on:
       api: {condition: service_healthy}
+      local-mail: {condition: service_healthy}
+  local-mail:
+    build: ./backend
+    command: ["python", "-m", "app.local_smtp"]
+    environment: *backend-env
+    depends_on:
+      db: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; s=socket.create_connection(('127.0.0.1',1025),2); assert s.recv(256).startswith(b'220'); s.close()"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
 volumes:
   postgres-data:
   object-data:

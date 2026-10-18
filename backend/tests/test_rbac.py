@@ -51,7 +51,7 @@ def test_mobile_scope_and_pin_ownership(client, login):
     viewer, admin, organizer = login("viewer"), login("admin"), login("organizer")
     assert client.get("/api/v1/clubs/club-beta-1", headers=viewer).status_code == 403
     assert client.get("/api/v1/clubs/club-beta-1", headers=admin).status_code == 200
-    assert len(client.get("/api/v1/leagues", headers=admin).json()) == 3
+    assert len(client.get("/api/v1/leagues", headers=admin).json()) == 6
     assert client.get("/api/v1/fixtures?league_id=league-beta-1", headers=viewer).status_code == 403
     assert client.get("/api/v1/standings/league-beta-1", headers=viewer).status_code == 403
     assert client.get("/api/v1/clubs/missing", headers=admin).status_code == 404

@@ -33,10 +33,16 @@ async def lifespan(app):
     with transaction() as db:
         if not db.get("meta", "seeded"):
             seed.reset(db)
+        from .demo_catalog import ensure
+        ensure(db)
     yield
 
 
 app = FastAPI(title="ArenaOne / NaSCon Part I", version="1.0.0", lifespan=lifespan)
+from .management import router as management_router
+app.include_router(management_router)
+from .mailbox import router as mailbox_router
+app.include_router(mailbox_router)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 requests_by_ip = defaultdict(deque)
 rate_lock = Lock()
@@ -280,7 +286,8 @@ def app_match(db, match_id, user):
     match = db.require("match", match_id)
     auth.tenant_access(user, match["tenant_id"])
     product = db.get("product", match.get("pinned_product_id", ""))
-    result = {**scoring.project(db, match_id), "pinned_product": product_json(db, product) if product else None}
+    result = {**scoring.project(db, match_id), "pinned_product": product_json(db, product) if product else None,
+              "scheduled_at": match.get("scheduled_at"), "venue": match.get("venue")}
     if match.get("operational_status"):
         result["status"] = match["operational_status"]
     return result
@@ -300,6 +307,33 @@ def app_fixtures(request: Request, league_id: str = "league-alpha-1"):
             away = db.get("club", match["away_team_id"], {})
             result.append({"match_id": match["match_id"], "league_id": league_id, "sport_id": match["sport_id"], "home_team_id": match["home_team_id"], "home_name": home.get("name", match["home_team_id"]), "away_team_id": match["away_team_id"], "away_name": away.get("name", match["away_team_id"]), "status": match.get("operational_status") or projection["status"], "scheduled_at": match.get("scheduled_at"), "venue": match.get("venue"), "home_score": projection["home"]["score"], "away_score": projection["away"]["score"]})
         return result
+
+
+@app.get("/api/v1/fixtures/highlights", response_model=list[dict])
+def sport_highlights(request: Request):
+    """One actual fixture per configured sport, respecting tenant visibility."""
+    with transaction() as db:
+        user = auth.authenticate(db, request.headers.get("authorization"))
+        matches = []
+        visible_leagues = {league["league_id"] for league in db.all("league") if auth.visible(user, league["tenant_id"])}
+        for match in db.all("match"):
+            if match.get("league_id") not in visible_leagues:
+                continue
+            score = scoring.project(db, match["match_id"])
+            status = match.get("operational_status") or score["status"]
+            home, away = (db.get("club", match[side + "_team_id"], {}) for side in ("home", "away"))
+            matches.append({"match_id": match["match_id"], "league_id": match["league_id"],
+                "sport_id": match["sport_id"], "home_team_id": match["home_team_id"], "away_team_id": match["away_team_id"],
+                "home_name": home.get("name", match["home_team_id"]), "away_name": away.get("name", match["away_team_id"]),
+                "status": status, "scheduled_at": match.get("scheduled_at"), "venue": match.get("venue"),
+                "home_score": score["home"]["score"], "away_score": score["away"]["score"]})
+        priority = {"in_progress": 0, "upcoming": 1, "completed": 2}
+        selected = []
+        for sport in db.all("sport"):
+            candidates = [m for m in matches if m["sport_id"] == sport["sport_id"]]
+            if candidates:
+                selected.append(min(candidates, key=lambda m: (priority.get(m["status"], 3), m["scheduled_at"] or "9999", m["match_id"])))
+        return selected
 
 
 @app.get("/api/v1/matches/{match_id}", response_model=dict)

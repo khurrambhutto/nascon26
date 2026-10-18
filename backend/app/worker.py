@@ -16,6 +16,7 @@ import redis
 
 from .common import canonical
 from .storage import initialize, transaction
+from .receipt_email import deliver_pending
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
@@ -71,6 +72,10 @@ def run():
                         db.put("outbox", event["event_id"], event)
         except Exception:
             log.exception("Outbox delivery failed; retrying")
+        try:
+            deliver_pending()
+        except Exception:
+            log.exception("Receipt email worker failed; retrying")
         time.sleep(1)
 
 
