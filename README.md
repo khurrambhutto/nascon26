@@ -21,6 +21,12 @@ The Docker build uses a complete Python 3.12/Linux x86_64 wheel lock with SHA-25
 
 The booklet's unavailable MinIO image is replaced with `bitnamilegacy/minio:2024.9.22`; notify the organizers of this compatibility substitution.
 
+## Local receipt inbox
+
+Open **http://localhost:8080/local-mail** and sign in with an ArenaOne demo account below. Successful app purchases with a receipt address are captured by the internal `local-mail` SMTP service. Customers see their own receipts; platform admins see all receipts. Open a message to download its PDF.
+
+The default Compose configuration needs no Google account, app password or internet mail provider. Captured messages remain in the local Postgres volume and are not delivered to the recipient's external email account. The app receipt screen includes **Open local inbox**. The internal SMTP port is not published to the host.
+
 ## Demo accounts
 
 All accounts use password `Nascon@26`.

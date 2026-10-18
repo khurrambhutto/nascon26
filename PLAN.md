@@ -128,6 +128,8 @@ Stack: Kotlin + Compose (pinned versions in `mobile/gradle/libs.versions.toml`),
 | 8 | Sync status | Pending queue list, sync button, per-action result (applied / rejected + plain-language reason) | Todo |
 
 ### Offline (NFR-4, desk check §8.4)
+
+**October 18 local revision:** User-requested management tools supersede the original shared Store navigation for staff. Admins, organizers and club managers land on Management; player/viewer accounts retain Store. Admins create leagues for any configured sport, and authorized staff schedule matches. Admins/managers edit products, stock, prices and eligible order states. The mobile queue now persists before requests, separates accounts, previews local scoring, retains sync results and uses authenticated `/api/v1/offline-sync`. See `mobile/LOCAL-FIXES.md` and `backend/API.md` for current flows and contracts. Changes remain uncommitted.
 - Cache every GET response (fixtures, standings, club, products, matches) in SQLite as JSON keyed by URL. When offline, show the cached data and an "Offline" banner.
 - Scoring and roster actions taken offline are saved to the `pending_actions` table in the exact §5.14 format (`action_id`, `type`, `queued_at`, `base_version`, `payload`). They survive the app being killed.
 - When the network comes back, `ConnectivityManager` triggers an automatic sync to `/audit/v1/offline-sync`. The app shows each result, translates error codes into plain English and clears the queue.

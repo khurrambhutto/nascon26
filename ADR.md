@@ -38,16 +38,16 @@
 ## ADR-006: Atomic checkout and durable outbox
 - Status: Accepted
 - Context: Inventory changes and order notifications cannot diverge.
-- Decision: Commit inventory, order, receipt and outbox in one transaction; worker delivers to Redis and MinIO.
+- Decision: Commit inventory, order, receipt and outbox in one transaction; worker delivers to Redis and MinIO. Authenticated checkout adds one SMTP receipt job per paid order, claimed with a DB lease and retried outside checkout. The default SMTP sink captures receipts locally in Postgres with a customer-scoped browser inbox.
 - Alternatives: Publishing before commit creates events for rolled-back orders.
-- Consequences: Delivery is at least once with stable event IDs for deduplication.
+- Consequences: Delivery is at least once with stable event IDs and email Message-IDs for deduplication. Missing SMTP credentials retain the job without blocking purchase or PDF download; a crash after SMTP acceptance may cause a retry of the same message.
 
 ## ADR-007: Native mobile with persistent offline replay
 - Status: Accepted
 - Context: Judges force-close the app offline and then synchronize queued actions.
-- Decision: Kotlin/Compose with SQLite cache and persistent action queue, replayed through the shared backend services.
+- Decision: Kotlin/Compose with account-scoped SQLite caches and a queue persisted before transmission; replay through authenticated shared backend services. Outbox delivery scans pending accounts independently of the visible session, using each creator's encrypted JWT and a native persisted JobScheduler fallback. Retain sessions and pending work on token expiry, and try a saved LAN address when USB loopback fails.
 - Alternatives: Memory-only queues lose actions on process death.
-- Consequences: Frontend implements local persistence; backend returns per-action conflict resolutions.
+- Consequences: The phone previews queued scoring events and stores sync outcomes. Cached password proofs and JWTs are encrypted with the Android Keystore; the dedicated outbox credential is removed once its queue drains. Account switching cannot borrow the visible account's privileges. Expired/revoked credentials retain queued work until the original account signs in. First-time login and payments require a server; wireless operation requires a shared reachable LAN. Android controls scheduling when the app is backgrounded or force-stopped.
 
 ## ADR-008: Contract and concurrency verification
 - Status: Accepted
