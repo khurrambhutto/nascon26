@@ -86,13 +86,14 @@ fun GoLiveScreen(onBack: () -> Unit) {
         if (!granted) message = "Camera and microphone are needed to broadcast."
     }
     LaunchedEffect(Unit) { permissions.launch(arrayOf(android.Manifest.permission.CAMERA, android.Manifest.permission.RECORD_AUDIO)) }
-    Column(Modifier.fillMaxSize().statusBarsPadding().padding(20.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    // No outer scroll: the WebView must receive swipes to scroll MediaMTX's settings and Publish button.
+    Column(Modifier.fillMaxSize().statusBarsPadding().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Go live", style = MaterialTheme.typography.headlineMedium)
         Text(message, modifier = Modifier.testTag("golive_status"))
         val current = key
         if (current != null && granted) {
-            Box(Modifier.fillMaxWidth().aspectRatio(3f / 4f).testTag("golive_preview")) { MediaWebView(mediaUrl("live/$current/publish"), Modifier.fillMaxSize()) }
-            Text("RTMP for OBS: rtmp://<laptop>:1935/live/$current", style = MaterialTheme.typography.bodySmall)
+            Box(Modifier.fillMaxWidth().weight(1f).testTag("golive_preview")) { MediaWebView(mediaUrl("live/$current/publish"), Modifier.fillMaxSize()) }
+            Text("Tip: choose H264, scroll to the bottom of the box, tap publish. OBS: rtmp://<laptop>:1935/live/$current", style = MaterialTheme.typography.bodySmall)
             OutlinedButton(onClick = {
                 scope.launch { ServiceLocator.repo.myStreamKey("revoke"); key = null; message = "Broadcast ended. The recording appears in your VOD archive." }
             }, modifier = Modifier.testTag("golive_stop")) { Text("End broadcast") }
