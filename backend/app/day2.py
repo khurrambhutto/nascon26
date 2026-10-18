@@ -24,7 +24,9 @@ def created_or_ok(result):
 @router.post("/audit/v1/stream/key")
 def stream_key(body: dict = Body(...)):
     with transaction() as db:
-        return created_or_ok(streaming.stream_key(db, body))
+        result = streaming.stream_key(db, body)
+    live.bump("epoch")  # viewers re-read which broadcast is live
+    return created_or_ok(result)
 
 
 @router.post("/audit/v1/costream/session")
@@ -153,8 +155,20 @@ def public_match(db, match_id):
             "home_name": names["home"], "away_name": names["away"],
             "home_score": score["home"]["score"], "away_score": score["away"]["score"],
             "score_text": f"{score['home']['score']} - {score['away']['score']}",
+            "home_team_id": match["home_team_id"], "away_team_id": match["away_team_id"],
+            "live_stream": live_stream(db, (match["home_team_id"], match["away_team_id"])),
             "pinned_product": {"product_id": product["product_id"], "name": product["name"],
                                "variants": [db.get("variant", v) for v in product["variant_ids"]]} if product else None}
+
+
+def live_stream(db, club_ids):
+    """An active broadcast by a player of either club: what the match page plays."""
+    for current in reversed(db.all("player_stream")):
+        player = db.get("player", current["player_id"]) if "player_id" in current else None
+        club = athletes.club_of(db, player) if player else None
+        if club and club["club_id"] in club_ids:
+            return {"player_id": player["player_id"], "stream_key": current["stream_key"]}
+    return None
 
 
 @router.get("/api/v1/public/matches/{match_id}")
@@ -221,6 +235,64 @@ def unfollow_athlete(athlete_id: str, request: Request):
         return athletes.follow(db, athlete_id, auth.authenticate(db, request.headers.get("authorization")), False)
 
 
+def acting_player(db, request):
+    user = auth.authenticate(db, request.headers.get("authorization"))
+    if user.get("player_id"):
+        return user["player_id"]
+    if user["role"] == "super_admin":  # platform admin may moderate on the host's behalf
+        return None
+    fail(403, "FORBIDDEN")
+
+
+@router.get("/api/v1/public/costream/{session_id}")
+def costream_view(session_id: str):
+    with reader() as db:
+        record, live_state = costream.state(db, session_id)
+        return costream.view(db, session_id, live_state)
+
+
+@router.post("/api/v1/costream/{session_id}/invites", status_code=201)
+def costream_invite(session_id: str, request: Request, body: dict = Body(...)):
+    with transaction() as db:
+        player = acting_player(db, request)
+        record, live_state = costream.state(db, session_id)
+        return costream.invite(db, session_id, player or live_state["active_host"], body.get("player_id"))
+
+
+@router.post("/api/v1/costream/{session_id}/join")
+def costream_join(session_id: str, body: dict = Body(...)):
+    with transaction() as db:
+        result = costream.join(db, session_id, body)
+    live.bump("costream:" + session_id)
+    return result
+
+
+@router.post("/api/v1/costream/{session_id}/control")
+def costream_control(session_id: str, request: Request, body: dict = Body(...)):
+    with transaction() as db:
+        player = acting_player(db, request)
+        record, live_state = costream.state(db, session_id)
+        result = costream.control(db, session_id, player or live_state["active_host"], body)
+        kicked = db.get("player_stream", body["player_id"]) if body.get("action") == "kick" else None
+    if kicked:
+        streaming.sever(kicked["stream_key"])  # cut the kicked broadcaster's ingest
+    live.bump("costream:" + session_id)
+    return result
+
+
+@router.post("/api/v1/me/stream-key")
+def my_stream_key(request: Request, body: dict = Body(default={})):
+    """In-app Go Live: a player rotates their own key and gets WHIP/RTMP/HLS endpoints."""
+    with transaction() as db:
+        user = auth.authenticate(db, request.headers.get("authorization"))
+        if not user.get("player_id"):
+            fail(403, "FORBIDDEN", reason="players_only")
+        action = body.get("action", "rotate")
+        response, _ = streaming.stream_key(db, {"action": action, "player_id": user["player_id"], "label": "ArenaOne app"})
+    live.bump("epoch")
+    return response
+
+
 # ---------- WebSockets (NFR-1) ----------
 
 async def push_changes(websocket, key, load):
@@ -247,6 +319,15 @@ async def match_socket(websocket: WebSocket, match_id: str):
         with reader() as db:
             return {"type": "score", **public_match(db, match_id)}
     await push_changes(websocket, "match:" + match_id, load)
+
+
+@router.websocket("/ws/costream/{session_id}")
+async def costream_socket(websocket: WebSocket, session_id: str):
+    def load():
+        with reader() as db:
+            record, live_state = costream.state(db, session_id)
+            return {"type": "costream", **costream.view(db, session_id, live_state)}
+    await push_changes(websocket, "costream:" + session_id, load)
 
 
 @router.websocket("/ws/chat/{room_id}")

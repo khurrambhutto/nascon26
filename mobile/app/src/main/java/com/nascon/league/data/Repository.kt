@@ -233,6 +233,14 @@ class Repository(context: Context) {
     // Raw JSON (the payloads contain nulls, e.g. "reason": null), parsed without a model class.
     suspend fun publicMatch(id: String) = runCatching { AppJson.parseToJsonElement(api.publicMatch(id).string()).jsonObject }.getOrNull()
     suspend fun chatRoom(room: String) = runCatching { AppJson.parseToJsonElement(api.chatRoom(room).string()).jsonObject }.getOrNull()
+    suspend fun costream(id: String) = runCatching { AppJson.parseToJsonElement(api.costream(id).string()).jsonObject }.getOrNull()
+
+    /** Go Live: rotate (or revoke) the signed-in player's stream key; returns the active key. */
+    suspend fun myStreamKey(action: String) = runCatching {
+        val body = kotlinx.serialization.json.buildJsonObject { put("action", kotlinx.serialization.json.JsonPrimitive(action)) }
+        val reply = AppJson.parseToJsonElement(api.myStreamKey(body).string()).jsonObject
+        if (reply["status"]?.jsonPrimitive?.content == "active") reply["stream_key"]?.jsonPrimitive?.content else null
+    }.getOrNull()
 
     suspend fun match(id: String): Loaded<MatchDetail> {
         val loaded = cached("match/$id", MatchDetail.serializer()) { api.match(id) }

@@ -88,9 +88,12 @@ services:
       retries: 20
   media:
     image: bluenviron/mediamtx:1.9.1
-    ports: ["1935:1935", "8888:8888", "8889:8889", "8189:8189/udp"]
+    ports: ["1935:1935", "8888:8888", "8889:8889", "8189:8189/udp", "8189:8189/tcp"]
     environment:
       MTX_API: "yes"
+      # WebRTC media over TCP too, advertised on 127.0.0.1 so `adb reverse` phones and local browsers connect.
+      MTX_WEBRTCLOCALTCPADDRESS: ":8189"
+      MTX_WEBRTCADDITIONALHOSTS: "127.0.0.1"
       MTX_AUTHMETHOD: http
       MTX_AUTHHTTPADDRESS: http://api:8080/internal/media/auth
       MTX_PATHDEFAULTS_RECORD: "yes"

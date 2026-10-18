@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
@@ -45,6 +47,7 @@ fun DeepLinkScreen(link: DeepLink, onClose: () -> Unit) {
     var teams by remember { mutableStateOf("") }
     var status by remember { mutableStateOf("Loading") }
     var chat by remember { mutableStateOf(listOf<String>()) }
+    var streams by remember { mutableStateOf(listOf<Pair<String, String?>>()) }
     LaunchedEffect(link) {
         val repo = ServiceLocator.repo
         while (true) {
@@ -54,9 +57,16 @@ fun DeepLinkScreen(link: DeepLink, onClose: () -> Unit) {
                     score = match["score_text"]?.jsonPrimitive?.content ?: "–"
                     teams = "${match["home_name"]?.jsonPrimitive?.content} vs ${match["away_name"]?.jsonPrimitive?.content}"
                     status = match["status"]?.jsonPrimitive?.content ?: ""
+                    val live = match["live_stream"] as? kotlinx.serialization.json.JsonObject
+                    streams = listOfNotNull(live?.let { (it["player_id"]?.jsonPrimitive?.content ?: "") to it["stream_key"]?.jsonPrimitive?.content })
                 }
             } else {
-                status = "Live"
+                val session = repo.costream(link.id)
+                status = session?.let { "Live · host ${it["active_host"]?.jsonPrimitive?.content} · ${it["layout"]?.jsonPrimitive?.content}" } ?: "Live"
+                streams = session?.get("streams")?.jsonArray?.map {
+                    val s = it.jsonObject
+                    (s["player_id"]?.jsonPrimitive?.content ?: "") to (s["stream_key"] as? kotlinx.serialization.json.JsonPrimitive)?.takeIf { p -> p.isString }?.content
+                }.orEmpty()
             }
             repo.chatRoom("chat-${link.id}")?.let { room ->
                 chat = room["messages"]?.jsonArray?.map {
@@ -67,10 +77,13 @@ fun DeepLinkScreen(link: DeepLink, onClose: () -> Unit) {
             delay(500)
         }
     }
-    Column(Modifier.fillMaxSize().statusBarsPadding().padding(20.dp).testTag("deeplink_screen"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(Modifier.fillMaxSize().statusBarsPadding().verticalScroll(rememberScrollState()).padding(20.dp).testTag("deeplink_screen"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(if (link.isCostream) "Co-stream" else if (link.isMatch) "Match Live" else "ArenaOne",
             style = MaterialTheme.typography.headlineMedium, modifier = Modifier.testTag("deeplink_title"))
         Text(link.id, modifier = Modifier.testTag("deeplink_entity_id"))
+        // Split view: one WebRTC tile per live broadcaster (solo match stream or up to 4 co-streamers).
+        if (streams.isEmpty()) LivePlayer(null, "Not live yet")
+        streams.take(4).forEach { (player, key) -> LivePlayer(key, player) }
         Card(Modifier.testTag("deeplink_live_card")) {
             Column(Modifier.padding(16.dp)) {
                 if (link.isMatch) {
@@ -78,8 +91,6 @@ fun DeepLinkScreen(link: DeepLink, onClose: () -> Unit) {
                     Text(score, style = MaterialTheme.typography.displaySmall, modifier = Modifier.testTag("deeplink_score"))
                 }
                 Text(status, modifier = Modifier.testTag("deeplink_status"))
-                Text("HLS: :8888/${if (link.isCostream) "costream" else "live"}/${link.id}/index.m3u8",
-                    style = MaterialTheme.typography.bodySmall)
             }
         }
         Text("Chat", style = MaterialTheme.typography.titleMedium)

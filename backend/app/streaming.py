@@ -51,7 +51,7 @@ def stream_key(store, body):
     key = override or "sk_live_" + secrets.token_hex(8)
     record = {"stream_key": key, "player_id": player_id, "label": label, "status": "active"}
     store.put("stream_key", key, record)
-    store.put("player_stream", player_id, {"stream_key": key})
+    store.put("player_stream", player_id, {"stream_key": key, "player_id": player_id})
     return response(action, record), action == "generate"
 
 

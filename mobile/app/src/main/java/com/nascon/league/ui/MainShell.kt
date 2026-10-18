@@ -164,8 +164,10 @@ fun MainShell(app: AppViewModel, session: Session, requestedMatch: String? = nul
                     onLogout = app::logout,
                     onManagement = if (manager) ({ nav.goToTab("manage") }) else null,
                     onOrders = { nav.navigate("orders") },
+                    onGoLive = { nav.navigate("golive") },
                 )
             }
+            composable("golive") { com.nascon.league.ui.screens.GoLiveScreen(onBack = back) }
             composable("sync") { SyncScreen(app, onBack = back) }
             composable("settings") { SettingsScreen(onBack = back) }
         }

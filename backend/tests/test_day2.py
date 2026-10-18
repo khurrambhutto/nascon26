@@ -312,3 +312,51 @@ def test_media_server_kick_and_stats(monkeypatch):
     assert streaming.media_stats() == (0, 0.0)
     monkeypatch.setattr(streaming.threading, "Thread", lambda target, args, daemon: type("T", (), {"start": lambda self: target(*args)})())
     streaming.sever("sk_live_a")
+
+
+def test_costream_host_controls_invites_and_live_view(client, login):
+    host = login("player")  # u-player is player-alpha-1
+    client.post("/audit/v1/costream/session", json={**COSTREAM, "participants": ["player-alpha-1", "player-alpha-2"], "layout": "grid_2", "simulate_host_drop": False})
+    client.post("/audit/v1/stream/key", json={"action": "generate", "player_id": "player-alpha-2"})
+    view = client.get("/api/v1/public/costream/cs-session-101").json()
+    assert view["active_host"] == "player-alpha-1" and view["streams"][1]["stream_key"].startswith("sk_live_")
+    invite = client.post("/api/v1/costream/cs-session-101/invites", json={"player_id": "player-beta-1"}, headers=host)
+    assert invite.status_code == 201
+    token = invite.json()["invite_token"]
+    assert client.post("/api/v1/costream/cs-session-101/join", json={"player_id": "player-beta-2", "invite_token": token}).status_code == 403
+    joined = client.post("/api/v1/costream/cs-session-101/join", json={"player_id": "player-beta-1", "invite_token": token}).json()
+    assert joined["participants"] == ["player-alpha-1", "player-alpha-2", "player-beta-1"]
+    control = lambda action, player: client.post("/api/v1/costream/cs-session-101/control", json={"action": action, "player_id": player}, headers=host)
+    assert control("mute", "player-alpha-2").json()["streams"][1]["muted"] is True
+    assert control("unmute", "player-alpha-2").json()["muted"] == []
+    assert control("spotlight", "player-beta-1").json()["layout"] == "spotlight"
+    kicked = control("kick", "player-beta-1").json()
+    assert "player-beta-1" not in kicked["participants"] and kicked["kicked"] == ["player-beta-1"] and kicked["spotlight"] is None
+    assert client.post("/api/v1/costream/cs-session-101/join", json={"player_id": "player-beta-1", "invite_token": token}).status_code == 403
+    assert control("kick", "ghost").status_code == 404
+    assert control("dance", "player-alpha-2").status_code == 400
+    assert client.post("/api/v1/costream/cs-session-101/control", json={"action": "mute", "player_id": "player-alpha-2"}, headers=login("viewer")).status_code == 403
+    assert client.post("/api/v1/costream/cs-session-101/control", json={"action": "mute", "player_id": "player-alpha-2"}, headers=login("admin")).status_code == 200
+    assert client.get("/api/v1/public/costream/cs-none").status_code == 404
+    with client.websocket_connect("/ws/costream/cs-session-101") as socket:
+        assert socket.receive_json()["type"] == "costream"
+
+
+def test_costream_join_refills_terminated_session_and_capacity(client, login):
+    client.post("/audit/v1/costream/session", json={**COSTREAM, "participants": ["player-alpha-1"]})
+    host_token = client.post("/api/v1/costream/cs-session-101/invites", json={"player_id": "player-alpha-2"}, headers=login("admin"))
+    assert host_token.status_code == 403  # terminated session has no host to act for
+    client.post("/audit/v1/costream/session", json={**COSTREAM, "session_id": "cs-full", "simulate_host_drop": False})
+    token = client.post("/api/v1/costream/cs-full/invites", json={"player_id": "demo-player-1-1"}, headers=login("player")).json()["invite_token"]
+    assert client.post("/api/v1/costream/cs-full/join", json={"player_id": "demo-player-1-1", "invite_token": token}).status_code == 409
+    assert client.post("/api/v1/costream/cs-full/invites", json={"player_id": "ghost"}, headers=login("player")).status_code == 404
+
+
+def test_in_app_go_live_and_match_page_stream(client, login):
+    live = client.post("/api/v1/me/stream-key", json={}, headers=login("player")).json()
+    assert live["status"] == "active" and live["ingest_endpoints"]["webrtc"].endswith("/whip")
+    assert client.post("/api/v1/me/stream-key", json={}, headers=login("viewer")).status_code == 403
+    match = client.get("/api/v1/public/matches/match-m1").json()
+    assert match["live_stream"] == {"player_id": "player-alpha-1", "stream_key": live["stream_key"]}
+    assert client.post("/api/v1/me/stream-key", json={"action": "revoke"}, headers=login("player")).json()["status"] == "revoked"
+    assert client.get("/api/v1/public/matches/match-m1").json()["live_stream"] is None

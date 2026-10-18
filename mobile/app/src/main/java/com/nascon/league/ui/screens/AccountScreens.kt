@@ -75,6 +75,7 @@ fun MeScreen(
     onLogout: () -> Unit,
     onManagement: (() -> Unit)? = null,
     onOrders: () -> Unit = {},
+    onGoLive: () -> Unit = {},
 ) {
     var confirmLogout by remember { mutableStateOf(false) }
     val user = session.user
@@ -93,6 +94,7 @@ fun MeScreen(
         SectionLabel("Your tools")
         if (onManagement != null) MenuRow("Management", "Leagues, matches, shop and club operations", Icons.Filled.Settings, "menu_management", onManagement)
         MenuRow("Orders", "View purchases and order status", Icons.AutoMirrored.Filled.KeyboardArrowRight, "menu_orders", onOrders)
+        if (user.player_id != null) MenuRow("Go live", "Broadcast from this phone's camera", Icons.AutoMirrored.Filled.KeyboardArrowRight, "menu_golive", onGoLive)
         when (user.role) {
             "club_manager", "super_admin" -> MenuRow("Manage squad", "Transfer, loan or release players", Icons.AutoMirrored.Filled.KeyboardArrowRight, "menu_roster", onOpenRoster)
             "league_organizer" -> InfoText("Open a match from Matches to start it, record scores, or undo a wrong event.")

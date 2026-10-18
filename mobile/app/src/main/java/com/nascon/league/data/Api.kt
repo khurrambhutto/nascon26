@@ -23,6 +23,12 @@ interface LeagueApi {
     @GET("api/v1/chat/{room}")
     suspend fun chatRoom(@Path("room") room: String): okhttp3.ResponseBody
 
+    @GET("api/v1/public/costream/{id}")
+    suspend fun costream(@Path("id") id: String): okhttp3.ResponseBody
+
+    @POST("api/v1/me/stream-key")
+    suspend fun myStreamKey(@Body body: kotlinx.serialization.json.JsonObject): okhttp3.ResponseBody
+
     @GET("api/v1/sports")
     suspend fun sports(): List<SportConfig>
 

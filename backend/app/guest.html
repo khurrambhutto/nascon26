@@ -12,7 +12,16 @@
   header h1 { margin: 0; font-size: 1.25rem; }
   main { max-width: 720px; margin: 0 auto; padding: 16px; display: grid; gap: 16px; }
   .card { background: #fff; border: 1px solid #d9cfc8; border-radius: 12px; padding: 16px; }
-  video { width: 100%; min-height: 200px; background: #111; border-radius: 12px; display: block; }
+  .stage { position: relative; background: #111; border-radius: 12px; overflow: hidden; aspect-ratio: 16 / 9; min-height: 200px; }
+  .stage iframe { border: 0; width: 100%; height: 100%; display: block; }
+  .waiting { color: #fff; display: grid; place-items: center; height: 100%; text-align: center; padding: 16px; }
+  .overlay { position: absolute; left: 12px; right: 12px; top: 12px; display: flex; justify-content: space-between; gap: 8px; pointer-events: none; }
+  .chip { background: rgba(0, 0, 0, .78); color: #fff; padding: 6px 12px; border-radius: 999px; font-weight: 700; }
+  .grid { display: grid; gap: 4px; height: 100%; grid-template-columns: repeat(var(--cols, 2), 1fr); }
+  .grid.spotlight > :first-child { grid-column: 1 / -1; }
+  .tile { position: relative; background: #222; min-height: 90px; }
+  .tile .chip { position: absolute; left: 6px; bottom: 6px; font-size: .8rem; }
+  .host-tools { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 8px; }
   .score { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-weight: 700; }
   #score { font-size: 2rem; }
   button, input { font: inherit; min-height: 48px; min-width: 48px; border-radius: 8px; }
@@ -33,7 +42,14 @@
 <header><h1 id="title">ArenaOne Live</h1><span id="status-note"></span></header>
 <main>
   <section aria-label="Live video">
-    <video data-testid="guest-video-player" id="player" controls playsinline muted aria-label="Live stream video player"></video>
+    <div class="stage" data-testid="guest-video-player" id="player" role="region" aria-label="Live stream video player">
+      <div class="waiting" id="stage-body">Waiting for the broadcast to start…</div>
+      <div class="overlay" aria-hidden="true">
+        <span class="chip" id="overlay-score">LIVE</span>
+        <span class="chip" id="overlay-merch">🛒 Alpha Home Jersey</span>
+      </div>
+    </div>
+    <div id="host-tools" class="host-tools" hidden aria-label="Host controls"></div>
   </section>
 
   <section class="card score" aria-label="Live score">
@@ -87,7 +103,53 @@ $("title").textContent = ctx.kind === "costream" ? "Co-stream " + ctx.id : ctx.k
 if (ctx.view === "notice") $("status-note").textContent = "Match " + (ctx.state || "updated");
 if (ctx.view === "preview") $("status-note").textContent = "Starts soon";
 if (ctx.view === "vod") $("status-note").textContent = "Replay";
-$("player").src = location.protocol + "//" + location.hostname + ":8888/" + (ctx.kind === "costream" ? "costream/" : "live/") + ctx.id + "/index.m3u8";
+const mediaBase = location.protocol + "//" + location.hostname + ":8889/live/";
+let shownStreams = "";
+
+function frame(streamKey, muted) {
+  // MediaMTX WebRTC (WHEP) player: sub-second latency, no plugin, works in every evergreen browser.
+  const element = document.createElement("iframe");
+  element.src = mediaBase + streamKey + "/?controls=false&autoplay=true&playsinline=true&muted=" + (muted ? "true" : "false");
+  element.title = "Live broadcast " + streamKey;
+  element.allow = "autoplay; fullscreen";
+  return element;
+}
+
+function showStreams(streams, layout, spotlight) {
+  const live = streams.filter((s) => s.stream_key);
+  const signature = JSON.stringify([live, layout, spotlight]);
+  if (signature === shownStreams) return;
+  shownStreams = signature;
+  const body = $("stage-body");
+  if (!live.length) { body.className = "waiting"; body.textContent = "Waiting for the broadcast to start…"; return; }
+  if (spotlight) live.sort((a, b) => (b.player_id === spotlight) - (a.player_id === spotlight));
+  body.className = "grid" + (layout === "spotlight" ? " spotlight" : "");
+  body.style.setProperty("--cols", live.length === 1 ? 1 : 2);
+  body.replaceChildren(...live.map((s) => {
+    const tile = document.createElement("div");
+    tile.className = "tile";
+    const label = document.createElement("span");
+    label.className = "chip";
+    label.textContent = s.player_id + (s.muted ? " 🔇" : "");
+    tile.append(frame(s.stream_key, true), label);
+    return tile;
+  }));
+}
+
+function showHostTools(session) {
+  const tools = $("host-tools");
+  tools.hidden = !memberToken;
+  if (!memberToken) return;
+  tools.replaceChildren(...session.participants.flatMap((player) => ["mute", "unmute", "spotlight", "kick"].map((action) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "secondary";
+    button.textContent = action + " " + player;
+    button.addEventListener("click", () => fetch("/api/v1/costream/" + ctx.id + "/control", {method: "POST",
+      headers: {"Content-Type": "application/json", Authorization: "Bearer " + memberToken}, body: JSON.stringify({action, player_id: player})}));
+    return button;
+  })));
+}
 
 async function ensureGuest() {
   if (guestToken) return guestToken;
@@ -105,10 +167,12 @@ function subscribe(path, onData) {
 
 function showScore(data) {
   $("score").textContent = data.score_text;
+  $("overlay-score").textContent = data.home_name + " " + data.score_text + " " + data.away_name;
+  showStreams(data.live_stream ? [data.live_stream] : [], "solo", null);
   $("home").textContent = data.home_name;
   $("away").textContent = data.away_name;
   const product = data.pinned_product;
-  if (product) $("merch-name").textContent = product.name;
+  if (product) { $("merch-name").textContent = product.name; $("overlay-merch").textContent = "🛒 " + product.name; }
 }
 
 function showChat(data) {
@@ -170,6 +234,11 @@ $("auth-form").addEventListener("submit", async (event) => {
 
 if (ctx.kind === "match") subscribe("/ws/matches/" + ctx.id, showScore);
 else $("score").textContent = "LIVE";
+if (ctx.kind === "costream") subscribe("/ws/costream/" + ctx.id, (session) => {
+  $("overlay-score").textContent = "Host: " + (session.active_host || "—") + " · " + session.layout;
+  showStreams(session.streams, session.layout, session.spotlight);
+  showHostTools(session);
+});
 subscribe("/ws/chat/" + ctx.room, showChat);
 ensureGuest();
 </script>
