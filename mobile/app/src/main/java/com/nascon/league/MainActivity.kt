@@ -23,6 +23,8 @@ import com.nascon.league.data.Repository
 import com.nascon.league.data.ServiceLocator
 import com.nascon.league.ui.AppViewModel
 import com.nascon.league.ui.MainShell
+import com.nascon.league.ui.screens.DeepLink
+import com.nascon.league.ui.screens.DeepLinkScreen
 import com.nascon.league.ui.screens.LoginScreen
 import com.nascon.league.ui.screens.SplashScreen
 import com.nascon.league.ui.theme.LeagueTheme
@@ -36,11 +38,13 @@ class LeagueApp : Application() {
 
 class MainActivity : ComponentActivity() {
     private val notificationMatch = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
+    private val deepLink = kotlinx.coroutines.flow.MutableStateFlow<DeepLink?>(null)
 
     override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
         notificationMatch.value = intent.getStringExtra("reminder_match_id")
+        deepLink.value = DeepLink.parse(intent.data)
     }
     @OptIn(ExperimentalComposeUiApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -51,15 +55,19 @@ class MainActivity : ComponentActivity() {
         )
         super.onCreate(savedInstanceState)
         notificationMatch.value = intent.getStringExtra("reminder_match_id")
+        deepLink.value = DeepLink.parse(intent.data)
         setContent {
             val app: AppViewModel = viewModel()
             val session by app.session.collectAsStateWithLifecycle()
             val requestedMatch by notificationMatch.collectAsStateWithLifecycle()
+            val link by deepLink.collectAsStateWithLifecycle()
             var showingSplash by rememberSaveable { mutableStateOf(savedInstanceState == null) }
             LeagueTheme {
                 Surface(Modifier.fillMaxSize().semantics { testTagsAsResourceId = true }) {
                     val current = session
-                    if (showingSplash) SplashScreen { showingSplash = false }
+                    val openLink = link
+                    if (openLink != null) DeepLinkScreen(openLink) { deepLink.value = null; showingSplash = false }
+                    else if (showingSplash) SplashScreen { showingSplash = false }
                     else if (current == null) LoginScreen(app) else androidx.compose.runtime.key(current.user.user_id) {
                         MainShell(app, current, requestedMatch) { notificationMatch.value = null }
                     }

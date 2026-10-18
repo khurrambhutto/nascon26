@@ -229,6 +229,10 @@ class Repository(context: Context) {
             }
         })
     }
+    /** Public data for nascon:// deep links; null when the backend is unreachable. */
+    suspend fun publicMatch(id: String) = runCatching { api.publicMatch(id) }.getOrNull()
+    suspend fun chatRoom(room: String) = runCatching { api.chatRoom(room) }.getOrNull()
+
     suspend fun match(id: String): Loaded<MatchDetail> {
         val loaded = cached("match/$id", MatchDetail.serializer()) { api.match(id) }
         reminders.update(owner(), id, loaded.data.scheduled_at, loaded.data.status)

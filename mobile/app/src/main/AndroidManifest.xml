@@ -34,6 +34,13 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- Day 2: QR / adb deep links nascon://entity/{id} and nascon://stream/{session} -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="nascon" />
+            </intent-filter>
         </activity>
 
         <!-- Shares the generated PDF receipt with viewer apps. -->

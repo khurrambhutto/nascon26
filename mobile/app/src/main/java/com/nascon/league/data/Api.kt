@@ -16,6 +16,13 @@ import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 interface LeagueApi {
+    // Day 2 guest endpoints (no login): used by nascon:// deep links.
+    @GET("api/v1/public/matches/{id}")
+    suspend fun publicMatch(@Path("id") id: String): kotlinx.serialization.json.JsonObject
+
+    @GET("api/v1/chat/{room}")
+    suspend fun chatRoom(@Path("room") room: String): kotlinx.serialization.json.JsonObject
+
     @GET("api/v1/sports")
     suspend fun sports(): List<SportConfig>
 
